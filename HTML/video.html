@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Video Call</title>
+    <link rel="stylesheet" href="../CSS/main.css" />
+    <link rel="stylesheet" href="../CSS/video.css" />
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <a href="main.html">
+                <img src="../images/logo.png" alt="Logo" id="logo">
+            </a>
+        </div>
+        Video Call with <span id="userName"></span>
+        <button class="logout-btn" onclick="handleLogout()">Logout</button>
+    </header>
+
+    <div class="video-container">
+        <div class="video-grid">
+            <div class="video-box">
+                <video id="localVideo" autoplay muted></video>
+                <div class="video-label">You</div>
+            </div>
+            <div class="video-box">
+                <video id="remoteVideo" autoplay></video>
+                <div class="video-label">Remote User</div>
+            </div>
+        </div>
+        <div class="controls">
+            <button class="control-btn" id="muteBtn">🎤</button>
+            <button class="control-btn" id="videoBtn">📹</button>
+            <button class="control-btn end-call" onclick="window.location.href='main.html'">End Call</button>
+        </div>
+    </div>
+
+    <script>
+        // Get username from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const userName = urlParams.get('user');
+        document.getElementById('userName').textContent = userName || 'User';
+
+        function handleLogout() {
+            // Add any cleanup logic here (e.g., clearing session)
+            window.location.href = 'login.html';
+        }
+    </script>
+</body>
+</html> 

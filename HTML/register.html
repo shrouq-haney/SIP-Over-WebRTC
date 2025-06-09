@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Register - SASH Talk</title>
+    <link rel="stylesheet" href="../CSS/main.css" />
+    <link rel="stylesheet" href="../CSS/auth.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="auth-body">
+    <div class="auth-logo">
+        <img src="../images/logo.png" alt="Logo">
+    </div>
+    
+    <div class="auth-container">
+        <div class="auth-image">
+            <h1>Join Our SASH Talk Platform</h1>
+            <p>Experience the next generation of real-time communication </p>
+            <div class="floating">
+                <i class="fas fa-video" style="font-size: 100px; color: rgba(255,255,255,0.1);"></i>
+            </div>
+        </div>
+
+        <div class="auth-form-container">
+            <h2>Create Account</h2>
+            <form class="auth-form" onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label for="phone">Phone Number</label>
+                    <input type="tel" id="phone" name="phone" 
+                           pattern="[0-9]{11}" 
+                           maxlength="11" 
+                           placeholder="Enter your phone number (11 digits)" 
+                           required>
+                    <small class="error-message" id="phone-error"></small>
+                </div>
+                <div class="form-group">
+                    <label for="fullname">Full Name</label>
+                    <input type="text" id="fullname" name="fullname" 
+                           pattern="[A-Za-z\s]+" 
+                           placeholder="Enter your full name (letters only)" 
+                           required>
+                    <small class="error-message" id="name-error"></small>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" 
+                           placeholder="Choose a password" 
+                           required>
+                    <small class="error-message" id="password-error"></small>
+                </div>
+                <div class="form-group">
+                    <label for="confirm-password">Confirm Password</label>
+                    <input type="password" id="confirm-password" name="confirm-password" 
+                           placeholder="Confirm your password" 
+                           required>
+                    <small class="error-message" id="confirm-error"></small>
+                </div>
+                <button type="submit" class="auth-button">
+                    <i class="fas fa-user-plus"></i> Create Account
+                </button>
+            </form>
+            <p class="auth-switch">
+                Already have an account? <a href="login.html">Sign In</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Phone number validation
+        document.getElementById('phone').addEventListener('input', function(e) {
+            let value = e.target.value;
+            
+            // Remove any non-digit characters
+            value = value.replace(/\D/g, '');
+            
+            // Ensure maximum length of 11
+            if (value.length > 11) {
+                value = value.slice(0, 11);
+            }
+            
+            e.target.value = value;
+            
+            // Show error if length is not 11
+            const errorElement = document.getElementById('phone-error');
+            if (value.length > 0 && value.length !== 11) {
+                errorElement.textContent = 'Phone number must be 11 digits';
+                errorElement.style.display = 'block';
+            } else {
+                errorElement.style.display = 'none';
+            }
+        });
+
+        // Name validation
+        document.getElementById('fullname').addEventListener('input', function(e) {
+            const value = e.target.value;
+            const errorElement = document.getElementById('name-error');
+            
+            if (!/^[A-Za-z\s]*$/.test(value)) {
+                errorElement.textContent = 'Name can only contain letters and spaces';
+                errorElement.style.display = 'block';
+                e.target.value = value.replace(/[^A-Za-z\s]/g, '');
+            } else {
+                errorElement.style.display = 'none';
+            }
+        });
+
+        // Password validation
+        document.getElementById('confirm-password').addEventListener('input', validatePasswords);
+        document.getElementById('password').addEventListener('input', validatePasswords);
+
+        function validatePasswords() {
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            const errorElement = document.getElementById('confirm-error');
+            
+            if (confirmPassword && password !== confirmPassword) {
+                errorElement.textContent = 'Passwords do not match';
+                errorElement.style.display = 'block';
+                return false;
+            } else {
+                errorElement.style.display = 'none';
+                return true;
+            }
+        }
+
+        function handleRegister(event) {
+            event.preventDefault();
+            
+            const phone = document.getElementById('phone').value;
+            const fullname = document.getElementById('fullname').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            
+            // Validate phone number
+            if (phone.length !== 11) {
+                document.getElementById('phone-error').textContent = 'Phone number must be 11 digits';
+                document.getElementById('phone-error').style.display = 'block';
+                return;
+            }
+            
+            // Validate name
+            if (!/^[A-Za-z\s]+$/.test(fullname)) {
+                document.getElementById('name-error').textContent = 'Name can only contain letters and spaces';
+                document.getElementById('name-error').style.display = 'block';
+                return;
+            }
+            
+            // Validate passwords match
+            if (!validatePasswords()) {
+                return;
+            }
+            
+            // If all validations pass, proceed with registration
+            console.log('Registration attempt:', { phone, fullname, password });
+            
+            // For demo purposes, redirect to login page
+            window.location.href = 'login.html';
+        }
+    </script>
+</body>
+</html> 

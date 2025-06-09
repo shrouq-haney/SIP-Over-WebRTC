@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Voice Call</title>
+    <link rel="stylesheet" href="../CSS/main.css" />
+    <link rel="stylesheet" href="../CSS/voice.css" />
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <a href="main.html">
+                <img src="../images/logo.png" alt="Logo" id="logo">
+            </a>
+        </div>
+        Voice Call with <span id="userName"></span>
+        <button class="logout-btn" onclick="handleLogout()">Logout</button>
+    </header>
+
+    <div class="voice-container">
+        <div class="call-status">
+            <div class="user-avatar">
+                <div class="avatar-circle">
+                    <span class="avatar-text">U</span>
+                </div>
+            </div>
+            <div class="call-timer">00:00</div>
+            <div class="call-quality">
+                <div class="signal-bar"></div>
+                <div class="signal-bar"></div>
+                <div class="signal-bar"></div>
+                <div class="signal-bar"></div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="control-btn" id="muteBtn">🎤</button>
+            <button class="control-btn" id="speakerBtn">🔊</button>
+            <button class="control-btn end-call" onclick="window.location.href='main.html'">End Call</button>
+        </div>
+    </div>
+
+    <script>
+        // Get username from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const userName = urlParams.get('user');
+        document.getElementById('userName').textContent = userName || 'User';
+        
+        // Update avatar text with first letter of username
+        const avatarText = document.querySelector('.avatar-text');
+        avatarText.textContent = (userName || 'U')[0].toUpperCase();
+
+        function handleLogout() {
+            // Add any cleanup logic here (e.g., clearing session)
+            window.location.href = 'login.html';
+        }
+    </script>
+</body>
+</html> 

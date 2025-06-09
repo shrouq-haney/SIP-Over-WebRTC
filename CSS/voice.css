@@ -1,0 +1,119 @@
+.voice-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: calc(100vh - 60px);
+    padding: 20px;
+    background-color: var(--background-color);
+}
+
+.call-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 50px;
+}
+
+.user-avatar {
+    margin-bottom: 20px;
+}
+
+.avatar-circle {
+    width: 150px;
+    height: 150px;
+    background: var(--primary-color);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse 2s infinite;
+}
+
+.avatar-text {
+    color: white;
+    font-size: 4em;
+    font-weight: bold;
+}
+
+.call-timer {
+    font-size: 2em;
+    margin-bottom: 20px;
+    color: var(--text-color);
+}
+
+.call-quality {
+    display: flex;
+    gap: 3px;
+}
+
+.signal-bar {
+    width: 4px;
+    height: 15px;
+    background: var(--primary-color);
+    border-radius: 2px;
+}
+
+.signal-bar:nth-child(2) { height: 20px; }
+.signal-bar:nth-child(3) { height: 25px; }
+.signal-bar:nth-child(4) { height: 30px; }
+
+.controls {
+    display: flex;
+    gap: 20px;
+}
+
+.control-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: none;
+    background: var(--primary-color);
+    color: white;
+    font-size: 1.5em;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.control-btn:hover {
+    transform: scale(1.1);
+    background-color: #004480;
+}
+
+.end-call {
+    background: var(--warning-color);
+    width: auto;
+    border-radius: 30px;
+    padding: 0 30px;
+}
+
+.end-call:hover {
+    background: #cc0000;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(0, 51, 102, 0.4);
+    }
+    70% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 20px rgba(0, 51, 102, 0);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(0, 51, 102, 0);
+    }
+}
+
+.logo {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.logo img {
+    height: 150px;
+    width: auto;
+} 

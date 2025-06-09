@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Login - SASH Talk</title>
+    <link rel="stylesheet" href="../CSS/main.css" />
+    <link rel="stylesheet" href="../CSS/auth.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="auth-body">
+    <div class="auth-logo">
+        <img src="../images/logo.png" alt="Logo">
+    </div>
+    
+    <div class="auth-container">
+        <div class="auth-image">
+            <h1>Welcome to SASH Talk</h1>
+            <p>Connect with your team through high-quality video calls, voice chats, and instant messaging.</p>
+        
+            <div class="floating">
+                <i class="fas fa-comments" style="font-size: 100px; color: rgba(255,255,255,0.1);"></i>
+            </div>
+        </div>
+
+        <div class="auth-form-container">
+            <h2>Sign In</h2>
+            <form class="auth-form" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="phone">Phone Number</label>
+                    <input type="tel" id="phone" name="phone" 
+                           pattern="[0-9]{11}" 
+                           maxlength="11" 
+                           placeholder="Enter your phone number (11 digits)" 
+                           required>
+                    <small class="error-message" id="phone-error"></small>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" 
+                           placeholder="Enter your password" 
+                           required>
+                </div>
+                <button type="submit" class="auth-button">
+                    <i class="fas fa-sign-in-alt"></i> Sign In
+                </button>
+            </form>
+            <p class="auth-switch">
+                Don't have an account? <a href="register.html">Create Account</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Phone number validation
+        document.getElementById('phone').addEventListener('input', function(e) {
+            let value = e.target.value;
+            
+            // Remove any non-digit characters
+            value = value.replace(/\D/g, '');
+            
+            // Ensure maximum length of 11
+            if (value.length > 11) {
+                value = value.slice(0, 11);
+            }
+            
+            e.target.value = value;
+            
+            // Show error if length is not 11
+            const errorElement = document.getElementById('phone-error');
+            if (value.length > 0 && value.length !== 11) {
+                errorElement.textContent = 'Phone number must be 11 digits';
+                errorElement.style.display = 'block';
+            } else {
+                errorElement.style.display = 'none';
+            }
+        });
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const phone = document.getElementById('phone').value;
+            const password = document.getElementById('password').value;
+            
+            // Validate phone number
+            if (phone.length !== 11) {
+                document.getElementById('phone-error').textContent = 'Phone number must be 11 digits';
+                document.getElementById('phone-error').style.display = 'block';
+                return;
+            }
+            
+            // If validation passes, proceed with login
+            console.log('Login attempt:', { phone, password });
+            
+            // For demo purposes, redirect to main page
+            window.location.href = 'main.html';
+        }
+    </script>
+</body>
+</html> 

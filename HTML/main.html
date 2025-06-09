@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>SIP over WebRTC UI</title>
+    <link rel="stylesheet" href="../CSS/main.css" />
+</head>
+<body>
+
+<header>
+    <div class="logo">
+        <img src="../images/logo.png" alt="Logo" id="logo">
+    </div>
+    SIP WebRTC Communication
+    <button class="logout-btn" onclick="handleLogout()">Logout</button>
+</header>
+
+<div class="container">
+    <div class="sidebar">
+        <h2>Online Users</h2>
+        <div class="user" onclick="selectUser('Ahmed')">
+            <span class="status">🟢</span> Ahmed
+        </div>
+        <div class="user" onclick="selectUser('Sara')">
+            <span class="status">🟢</span> Sara
+        </div>
+        <div class="user" onclick="selectUser('John')">
+            <span class="status">🔴</span> John
+        </div>
+    </div>
+
+    <div class="details" id="details">
+        <h2>Select a user to start</h2>
+    </div>
+</div>
+
+<script>
+    function selectUser(userName) {
+        const details = document.getElementById('details');
+        details.innerHTML = `
+            <h2>Talk to ${userName}</h2>
+            <div class="buttons">
+                <button class="btn btn-video" onclick="window.location.href='video.html?user=${userName}'">📹 Video Call</button>
+                <button class="btn btn-voice" onclick="window.location.href='voice.html?user=${userName}'">📞 Voice Call</button>
+                <button class="btn btn-chat" onclick="window.location.href='chat.html?user=${userName}'">💬 Chat</button>
+            </div>
+        `;
+    }
+
+    function handleLogout() {
+        // Add any cleanup logic here (e.g., clearing session)
+        window.location.href = 'login.html';
+    }
+</script>
+
+</body>
+</html>
