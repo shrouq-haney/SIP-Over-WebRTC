@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="../CSS/main.css" />
     <link rel="stylesheet" href="../CSS/video.css" />
     <link rel="icon" type="image/png" href="../images/outgoing-call.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
 
 </head>
 <body>
@@ -16,9 +18,14 @@
                 <img src="../images/logo.png" alt="Logo" id="logo">
             </a>
         </div>
-        Video Call with <span id="userName"></span>
-        <button class="logout-btn" onclick="handleLogout()">Logout</button>
-    </header>
+        <div class="chat-title">
+            <i class="fas fa-video"></i>
+            Video Call with <span id="userName"></span>
+        </div>
+        <button class="logout-btn" onclick="handleLogout()">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </button>   
+     </header>
 
     <div class="video-container">
         <div class="video-grid">
@@ -34,7 +41,7 @@
         <div class="controls">
             <button class="control-btn" id="muteBtn">🎤</button>
             <button class="control-btn" id="videoBtn">📹</button>
-            <button class="control-btn end-call" onclick="window.location.href='main.html'">End Call</button>
+            <button class="control-btn end-call" onclick="handleEndVideo()">End Call</button>
         </div>
     </div>
 
@@ -47,6 +54,12 @@
         function handleLogout() {
             // Add any cleanup logic here (e.g., clearing session)
             window.location.href = 'login.html';
+        }
+
+        function handleEndVideo() {
+            if (confirm('Are you sure you want to end this video call?')) {
+                window.location.href = 'main.html';
+            }
         }
     </script>
 </body>

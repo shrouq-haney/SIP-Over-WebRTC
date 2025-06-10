@@ -7,16 +7,31 @@
     <link rel="icon" type="image/png" href="../images/outgoing-call.png">
     <link rel="stylesheet" href="../CSS/main.css" />
     <link rel="stylesheet" href="../CSS/chat.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
     <header>
-        <div class="logo">
-            <a href="main.html">
-                <img src="../images/logo.png" alt="Logo" id="logo">
-            </a>
+        <div class="header-left">
+            <div class="logo">
+                <a href="main.html">
+                    <img src="../images/logo.png" alt="Logo" id="logo">
+                </a>
+            </div>
         </div>
-        Chat with <span id="userName"></span>
-        <button class="logout-btn" onclick="handleLogout()">Logout</button>
+        
+        <div class="chat-title">
+            <i class="fas fa-comments"></i>
+            Chat with <span id="userName"></span>
+        </div>
+
+        <div class="header-buttons">
+            <button class="end-chat-btn" onclick="handleEndChat()">
+                <i class="fas fa-times-circle"></i> End Chat
+            </button>
+            <button class="logout-btn" onclick="handleLogout()">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </div>
     </header>
 
     <div class="chat-container">
@@ -80,6 +95,12 @@
                 sendMessage();
             }
         });
+
+        function handleEndChat() {
+            if (confirm('Are you sure you want to end this chat?')) {
+                window.location.href = 'main.html';
+            }
+        }
 
         function handleLogout() {
             // Add any cleanup logic here (e.g., clearing session)

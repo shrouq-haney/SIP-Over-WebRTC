@@ -82,6 +82,13 @@
     border-radius: 15px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
     color: white;
+    transform: translateY(0);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.auth-form-container:hover {
+    transform: translateY(-10px) scale(1.02);
+    box-shadow: 0 20px 35px rgba(0, 0, 0, 0.4);
 }
 
 .auth-logo {
@@ -113,7 +120,19 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    transform: translateY(0);
+    transition: transform 0.3s ease;
 }
+
+.auth-form-container:hover .form-group {
+    transform: translateY(-5px);
+    transition-delay: calc(var(--index, 0) * 0.1s);
+}
+
+.auth-form-container:hover .form-group:nth-child(1) { --index: 1; }
+.auth-form-container:hover .form-group:nth-child(2) { --index: 2; }
+.auth-form-container:hover .form-group:nth-child(3) { --index: 3; }
+.auth-form-container:hover .form-group:nth-child(4) { --index: 4; }
 
 .form-group label {
     color: white;
@@ -130,13 +149,15 @@
     border-radius: 8px;
     font-size: 16px;
     color: white;
-    transition: all 0.3s;
+    transition: all 0.3s ease;
 }
 
 .form-group input:focus {
     outline: none;
     background: rgba(255, 255, 255, 0.15);
     border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
 .form-group input::placeholder {
@@ -158,12 +179,27 @@
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
 }
 
 .auth-button:hover {
     background: #45a049;
-    transform: translateY(-2px);
+    transform: translateY(-3px);
+    box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+}
+
+.auth-button:active {
+    transform: translateY(0);
+}
+
+.auth-button i {
+    transition: transform 0.3s ease;
+}
+
+.auth-button:hover i {
+    transform: rotate(360deg);
 }
 
 .auth-switch {

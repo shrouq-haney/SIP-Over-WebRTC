@@ -91,7 +91,7 @@
 }
 
 .send-btn:hover {
-    background: #004480;
+    background: var(--primary-color);
 }
 
 .logo {
@@ -104,4 +104,47 @@
 .logo img {
     height: 150px;
     width: auto;
+}
+
+.end-chat-btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    background: var(--warning-color);
+    color: white;
+    position: absolute;
+    right: 150px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 10px;
+}
+
+.end-chat-btn:hover {
+    background: #cc0000;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(204, 0, 0, 0.2);
+}
+
+
+@media (max-width: 768px) {
+    .header-buttons {
+        gap: 5px;
+    }
+
+    .end-chat-btn, .logout-btn {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    .end-chat-btn i, .logout-btn i {
+        font-size: 14px;
+    }
 } 

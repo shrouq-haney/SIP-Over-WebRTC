@@ -33,7 +33,7 @@
     position: absolute;
     bottom: 10px;
     left: 10px;
-    background: rgba(0, 51, 102, 0.7);
+    background: var(--primary-color);
     color: white;
     padding: 5px 10px;
     border-radius: 5px;
