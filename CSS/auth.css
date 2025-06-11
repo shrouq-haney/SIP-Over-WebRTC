@@ -11,7 +11,8 @@
     justify-content: center;
     font-family: Arial, sans-serif;
     position: relative;
-    overflow: hidden;
+    overflow-y: auto;
+    padding: 20px 0;
 }
 
 .auth-body::before {
@@ -32,6 +33,7 @@
     display: flex;
     position: relative;
     z-index: 2;
+    margin: auto;
 }
 
 .auth-image {
@@ -82,13 +84,27 @@
     border-radius: 15px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
     color: white;
-    transform: translateY(0);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
-.auth-form-container:hover {
-    transform: translateY(-10px) scale(1.02);
-    box-shadow: 0 20px 35px rgba(0, 0, 0, 0.4);
+/* Customize scrollbar for auth-form-container */
+.auth-form-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.auth-form-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.auth-form-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+.auth-form-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
 }
 
 .auth-logo {
@@ -235,18 +251,19 @@
 }
 
 /* Responsive adjustments */
-@media (max-width: 900px) {
+@media (max-width: 768px) {
     .auth-container {
         flex-direction: column;
-        max-width: 450px;
-    }
-
-    .auth-image {
-        display: none;
+        align-items: center;
+        padding: 10px;
     }
 
     .auth-form-container {
-        width: 100%;
+        width: 90%;
+        max-width: 400px;
+        padding: 30px 20px;
+        margin-top: 20px;
+        max-height: 80vh;
     }
 }
 
