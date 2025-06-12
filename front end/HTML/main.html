@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title> SASH Talk</title>
+    <link rel="icon" type="image/png" href="../images/outgoing-call.png">
+
+    <link rel="stylesheet" href="../CSS/main.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<header>
+    <div class="logo">
+        <img src="../images/logo.png" alt="Logo" id="logo">
+    </div>
+    <button class="logout-btn" onclick="handleLogout()">
+        <i class="fas fa-sign-out-alt"></i> Logout
+    </button>
+</header>
+
+<div class="container">
+    <div class="sidebar">
+        <h2>Online Users</h2>
+        <!-- User list will be dynamically inserted here -->
+    </div>
+
+    <div class="details" id="details">
+        <h2>Select a user to start</h2>
+    </div>
+</div>
+
+<script type="module" src="../js/api.js"></script>
+<script type="module" src="../js/main.js"></script>
+
+</body>
+</html>

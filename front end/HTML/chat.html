@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Chat</title>
+    <link rel="icon" type="image/png" href="../images/outgoing-call.png">
+    <link rel="stylesheet" href="../CSS/main.css" />
+    <link rel="stylesheet" href="../CSS/chat.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <div class="logo">
+                <a href="main.html">
+                    <img src="../images/logo.png" alt="Logo" id="logo">
+                </a>
+            </div>
+        </div>
+        
+        <div class="chat-title">
+            <i class="fas fa-comments"></i>
+            Chat with <span id="userName"></span>
+        </div>
+
+        <div class="header-buttons">
+            <button class="end-chat-btn" onclick="handleEndChat()">
+                <i class="fas fa-times-circle"></i> End Chat
+            </button>
+            <button class="logout-btn" onclick="handleLogout()">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </div>
+    </header>
+
+    <div class="chat-container">
+        <div class="chat-messages" id="chatMessages">
+            <!-- Messages will be added here -->
+        </div>
+        
+        <div class="chat-input">
+            <input type="text" id="messageInput" placeholder="Type your message...">
+            <button class="send-btn">Send</button>
+        </div>
+    </div>
+
+    <script type="module" src="../js/api.js"></script>
+    <script type="module" src="../js/chat.js"></script>
+</body>
+</html> 

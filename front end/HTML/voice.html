@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Voice Call</title>
+    <link rel="stylesheet" href="../CSS/main.css" />
+    <link rel="stylesheet" href="../CSS/voice.css" />
+    <link rel="icon" type="image/png" href="../images/outgoing-call.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <a href="main.html">
+                <img src="../images/logo.png" alt="Logo" id="logo">
+            </a>
+        </div>
+        <div class="chat-title">
+            <i class="fas fa-phone"></i>
+            Voice Call with <span id="userName"></span>
+        </div>
+        <button class="logout-btn" onclick="handleLogout()">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </button>   
+     </header>
+
+    <div class="voice-container">
+        <div class="call-status">
+            <div class="user-avatar">
+                <div class="avatar-circle">
+                    <span class="avatar-text">U</span>
+                </div>
+            </div>
+            <div class="call-timer">00:00</div>
+            <div class="call-quality">
+                <div class="signal-bar"></div>
+                <div class="signal-bar"></div>
+                <div class="signal-bar"></div>
+                <div class="signal-bar"></div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="control-btn" id="muteBtn">🎤</button>
+            <button class="control-btn" id="speakerBtn">🔊</button>
+            <button class="control-btn end-call" onclick="handleEndVoice()">End Call</button>
+        </div>
+    </div>
+
+    <script type="module" src="../js/api.js"></script>
+    <script type="module" src="../js/voice.js"></script>
+</body>
+</html> 
