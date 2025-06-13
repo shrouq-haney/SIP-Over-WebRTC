@@ -15,7 +15,7 @@ import com.webrtc.backend.util.DatabaseUtil;
 
 public class SignalingDao {
 
-    public void saveSdp(SdpExchange sdp) {
+    public void saveSdp(SdpExchange sdp) throws SQLException {
         String sql = "INSERT INTO sdp_exchange (sender_id, receiver_id, type, sdp) VALUES (?, ?, ?, ?)";
         try (Connection conn = DatabaseUtil.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -24,12 +24,10 @@ public class SignalingDao {
             stmt.setString(3, sdp.getType().getType());
             stmt.setString(4, sdp.getSdp());
             stmt.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
 
-    public SdpExchange getSdp(int receiverId) {
+    public SdpExchange getSdp(int receiverId) throws SQLException {
         String sql = "SELECT * FROM sdp_exchange WHERE receiver_id = ? ORDER BY created_at DESC LIMIT 1";
         SdpExchange sdp = null;
         try (Connection conn = DatabaseUtil.getConnection();
@@ -46,13 +44,11 @@ public class SignalingDao {
                 sdp.setStatus(CallStatus.fromString(rs.getString("status")));
                 sdp.setCreatedAt(rs.getTimestamp("created_at"));
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
         return sdp;
     }
 
-    public void updateSdpStatus(int senderId, int receiverId, CallStatus status) {
+    public void updateSdpStatus(int senderId, int receiverId, CallStatus status) throws SQLException {
         String sql = "UPDATE sdp_exchange SET status = ? WHERE id = (" +
                 "SELECT id FROM (SELECT id FROM sdp_exchange " +
                 "WHERE sender_id = ? AND receiver_id = ? " +
@@ -63,12 +59,10 @@ public class SignalingDao {
             stmt.setInt(2, senderId);
             stmt.setInt(3, receiverId);
             stmt.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
 
-    public SdpExchange getCallStatus(int senderId, int receiverId) {
+    public SdpExchange getCallStatus(int senderId, int receiverId) throws SQLException {
         String sql = "SELECT * FROM sdp_exchange WHERE sender_id = ? AND receiver_id = ? ORDER BY created_at DESC LIMIT 1";
         SdpExchange sdp = null;
         try (Connection conn = DatabaseUtil.getConnection();
@@ -86,13 +80,11 @@ public class SignalingDao {
                 sdp.setStatus(CallStatus.fromString(rs.getString("status")));
                 sdp.setCreatedAt(rs.getTimestamp("created_at"));
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
         return sdp;
     }
 
-    public void saveIceCandidate(IceCandidate candidate) {
+    public void saveIceCandidate(IceCandidate candidate) throws SQLException {
         String sql = "INSERT INTO ice_candidates (sender_id, receiver_id, candidate) VALUES (?, ?, ?)";
         try (Connection conn = DatabaseUtil.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -100,12 +92,10 @@ public class SignalingDao {
             stmt.setInt(2, candidate.getReceiverId());
             stmt.setString(3, candidate.getCandidate());
             stmt.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
 
-    public List<IceCandidate> getIceCandidates(int receiverId) {
+    public List<IceCandidate> getIceCandidates(int receiverId) throws SQLException {
         String sql = "SELECT * FROM ice_candidates WHERE receiver_id = ?";
         List<IceCandidate> candidates = new ArrayList<>();
         try (Connection conn = DatabaseUtil.getConnection();
@@ -121,8 +111,6 @@ public class SignalingDao {
                 candidate.setCreatedAt(rs.getTimestamp("created_at"));
                 candidates.add(candidate);
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
         return candidates;
     }

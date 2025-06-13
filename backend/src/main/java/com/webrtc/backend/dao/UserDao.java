@@ -122,4 +122,27 @@ public class UserDao {
             stmt.executeUpdate();
         }
     }
+
+    public User getUserById(int userId) throws SQLException {
+        String sql = "SELECT * FROM users WHERE id = ?";
+        User user = null;
+
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    user = new User();
+                    user.setId(rs.getInt("id"));
+                    user.setUsername(rs.getString("username"));
+                    user.setMsisdn(rs.getString("msisdn"));
+                    user.setOnline(rs.getBoolean("online"));
+                    user.setLastUpdate(rs.getTimestamp("last_update"));
+                    user.setCreatedAt(rs.getTimestamp("created_at"));
+                }
+            }
+        }
+        return user;
+    }
 } 

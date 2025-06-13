@@ -49,11 +49,11 @@ public class LoginServlet extends HttpServlet {
                 System.out.println("Password check result: " + passwordMatches);
 
                 if (passwordMatches) {
-                    Map<String, Object> result = new HashMap<>();
-                    result.put("userId", user.getId());
-                    
-                    resp.setContentType("application/json");
-                    resp.getWriter().write(objectMapper.writeValueAsString(result));
+                Map<String, Object> result = new HashMap<>();
+                result.put("userId", user.getId());
+                
+                resp.setContentType("application/json");
+                resp.getWriter().write(objectMapper.writeValueAsString(result));
                     System.out.println("Login successful for user: " + user.getUsername());
                 } else {
                     System.out.println("Login failed: Incorrect password for user " + user.getUsername());

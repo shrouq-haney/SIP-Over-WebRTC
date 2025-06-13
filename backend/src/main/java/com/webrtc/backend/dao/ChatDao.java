@@ -14,7 +14,7 @@ import com.webrtc.backend.util.DatabaseUtil;
 public class ChatDao {
 
     public void saveMessage(ChatMessage message) throws SQLException {
-        String sql = "INSERT INTO chat_messages (sender_id, receiver_id, content, read) VALUES (?, ?, ?, ?)";
+        String sql = "INSERT INTO chat_messages (sender_id, receiver_id, content, `read`) VALUES (?, ?, ?, ?)";
         try (Connection conn = DatabaseUtil.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setInt(1, message.getSenderId());

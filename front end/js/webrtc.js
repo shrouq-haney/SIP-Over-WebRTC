@@ -9,6 +9,7 @@ let localStream;
 let remoteStream;
 let peerConnection;
 let signalingInterval;
+let pendingCandidates = []; // Queue for candidates that arrive early
 
 const STUN_SERVERS = {
     iceServers: [
@@ -23,6 +24,11 @@ const remoteVideo = document.getElementById('remoteVideo');
 const userNameSpan = document.getElementById('userName');
 const muteBtn = document.getElementById('muteBtn');
 const videoBtn = document.getElementById('videoBtn');
+const endCallBtn = document.getElementById('endCallBtn');
+// Modal Elements
+const endCallModal = document.getElementById('endCallModal');
+const confirmEndCallBtn = document.getElementById('confirmEndCallBtn');
+const cancelEndCallBtn = document.getElementById('cancelEndCallBtn');
 
 // --- Functions ---
 
@@ -80,47 +86,57 @@ function handleTrack(event) {
 async function startSignaling() {
     // This interval will handle all signaling: offers, answers, and candidates
     signalingInterval = setInterval(async () => {
-        // 1. Get remote ICE candidates
+        // --- 1. Get remote ICE candidates ---
         const candidatesResponse = await fetch(`${API_BASE_URL}/signaling/get-candidates?userId=${currentUserId}`);
         if (candidatesResponse.ok) {
             const candidates = await candidatesResponse.json();
-            candidates.forEach(c => {
+            for (const c of candidates) {
                 if (c.candidate) {
-                    peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(c.candidate)))
-                        .catch(e => console.error("Error adding received ICE candidate", e));
+                    const iceCandidate = new RTCIceCandidate(JSON.parse(c.candidate));
+                    if (peerConnection.remoteDescription) {
+                        await peerConnection.addIceCandidate(iceCandidate).catch(e => console.error("Error adding ICE candidate", e));
+                    } else {
+                        pendingCandidates.push(iceCandidate);
+                    }
                 }
-            });
+            }
         }
 
-        // 2. Check for an incoming offer or answer
+        // --- 2. Check for an incoming offer or answer ---
         const sdpResponse = await fetch(`${API_BASE_URL}/signaling/get-sdp?userId=${currentUserId}`);
-        if (sdpResponse.ok) {
-            const sdpData = await sdpResponse.json();
-            if (sdpData && sdpData.sdp) {
-                const sdp = JSON.parse(sdpData.sdp);
-                if (sdp.type === 'offer') {
-                    // This user is the callee
-                    if (!peerConnection.currentRemoteDescription) {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
-                        const answer = await peerConnection.createAnswer();
-                        await peerConnection.setLocalDescription(answer);
-                        
-                        await fetch(`${API_BASE_URL}/signaling/send-sdp`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                senderId: currentUserId,
-                                receiverId: sdpData.senderId,
-                                sdp: JSON.stringify(answer)
-                            })
-                        });
-                    }
-                } else if (sdp.type === 'answer') {
-                    // This user is the caller
-                    if (!peerConnection.currentRemoteDescription) {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
-                    }
-                }
+        
+        if (sdpResponse.status === 404) {
+            return; // No new SDP, just continue silently
+        }
+        if (!sdpResponse.ok) {
+            console.error('Error fetching SDP:', sdpResponse.statusText);
+            return;
+        }
+        
+        const sdpData = await sdpResponse.json();
+        if (sdpData && sdpData.sdp && !peerConnection.currentRemoteDescription) {
+            const sdp = JSON.parse(sdpData.sdp);
+
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+            
+            for (const candidate of pendingCandidates) {
+                await peerConnection.addIceCandidate(candidate).catch(e => console.error("Error adding queued ICE candidate", e));
+            }
+            pendingCandidates = [];
+
+            if (sdp.type === 'offer') {
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                await fetch(`${API_BASE_URL}/signaling/send-sdp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        senderId: currentUserId,
+                        receiverId: sdpData.senderId,
+                        sdp: JSON.stringify(answer)
+                    })
+                });
             }
         }
     }, 2000); // Poll every 2 seconds
@@ -142,21 +158,45 @@ async function initiateCall() {
     });
 }
 
-function handleEndVideo() {
-    if (confirm('Are you sure you want to end this video call?')) {
-        clearInterval(signalingInterval);
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-        }
-        if (peerConnection) {
-            peerConnection.close();
-        }
-        window.location.href = 'main.html';
+/**
+ * Cleans up all call-related resources.
+ */
+function cleanupCall() {
+    clearInterval(signalingInterval);
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
     }
+    if (peerConnection) {
+        peerConnection.close();
+    }
+    pendingCandidates = []; // Clear any pending candidates
+}
+
+function handleEndVideo() {
+    // Instead of confirming, just show the modal
+    endCallModal.style.display = 'flex';
+}
+
+function confirmEndVideo() {
+    cleanupCall();
+    window.location.href = 'main.html';
 }
 
 async function handleLogout() {
-    handleEndVideo(); // a full cleanup
+    cleanupCall(); // End the call without confirmation
+    try {
+        await fetch(`${API_BASE_URL}/auth/logout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId })
+        });
+    } catch (error) {
+        console.error('Logout failed on server:', error);
+    } finally {
+        // Always clear session and redirect to login page
+        sessionStorage.clear();
+        window.location.href = 'login.html';
+    }
 }
 
 function toggleMute() {
@@ -193,9 +233,15 @@ async function initialize() {
         // Add event listeners
         muteBtn.addEventListener('click', toggleMute);
         videoBtn.addEventListener('click', toggleVideo);
+        endCallBtn.addEventListener('click', handleEndVideo); // Show modal on click
+        
+        // Modal button listeners
+        confirmEndCallBtn.addEventListener('click', confirmEndVideo);
+        cancelEndCallBtn.addEventListener('click', () => {
+            endCallModal.style.display = 'none';
+        });
 
         // Make functions globally available
-        window.handleEndVideo = handleEndVideo;
         window.handleLogout = handleLogout;
     }
 }

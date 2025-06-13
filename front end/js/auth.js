@@ -22,6 +22,33 @@ function clearServerError() {
     }
 }
 
+/**
+ * Parses a backend error response and displays the clean message.
+ * @param {Response} response - The fetch response object.
+ * @param {string} defaultMessage - A fallback message.
+ */
+async function displayBackendError(response, defaultMessage) {
+    try {
+        const errorText = await response.text();
+        const errorJson = JSON.parse(errorText);
+        if (errorJson && errorJson.error) {
+            showServerError(errorJson.error);
+        } else {
+            showServerError(errorText || defaultMessage);
+        }
+    } catch (e) {
+        // If the response isn't valid JSON, show the raw text or a default message.
+        // We need to re-fetch the text if JSON.parse fails and we don't have it.
+        // A better way is to get text first.
+        try {
+            const rawText = await response.text();
+            showServerError(rawText || defaultMessage);
+        } catch (finalError) {
+            showServerError(defaultMessage);
+        }
+    }
+}
+
 async function handleLogin(event) {
     event.preventDefault();
     clearServerError(); // Clear previous errors
@@ -30,7 +57,7 @@ async function handleLogin(event) {
     const passwordInput = document.getElementById('password');
     const phoneError = document.getElementById('phone-error');
 
-    const phoneValue = phoneInput.value; // Get phone number from form
+    const phoneValue = phoneInput.value;
     const password = passwordInput.value;
 
     if (phoneValue.length !== 11) {
@@ -47,20 +74,22 @@ async function handleLogin(event) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            // The backend error shows it expects the phone number in the 'msisdn' field
             body: JSON.stringify({ msisdn: phoneValue, password }),
         });
 
         if (response.ok) {
             const data = await response.json();
             sessionStorage.setItem('userId', data.userId);
-            // Store the phone number as the 'username' for this session
             sessionStorage.setItem('username', phoneValue);
             window.location.href = 'main.html';
         } else {
-            // Display detailed error from server
             const errorText = await response.text();
-            showServerError(errorText || 'Invalid credentials.');
+            try {
+                const errorJson = JSON.parse(errorText);
+                showServerError(errorJson.error || 'Invalid credentials.');
+            } catch (e) {
+                showServerError(errorText || 'Invalid credentials.');
+            }
         }
     } catch (error) {
         console.error('Login error:', error);
@@ -101,19 +130,22 @@ async function handleRegister(event) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                username: fullname, // Send Full Name as username
+                username: fullname,
                 password: password,
-                msisdn: phone      // Send Phone Number as msisdn
+                msisdn: phone
             }),
         });
 
         if (response.status === 201) {
-            // Redirect to login page on successful registration
             window.location.href = 'login.html';
         } else {
-            // Display detailed error from server
             const errorText = await response.text();
-            showServerError(errorText || 'Registration failed.');
+            try {
+                const errorJson = JSON.parse(errorText);
+                showServerError(errorJson.error || 'Registration failed.');
+            } catch (e) {
+                showServerError(errorText || 'Registration failed.');
+            }
         }
     } catch (error) {
         console.error('Registration error:', error);

@@ -12,6 +12,7 @@ const currentUserId = sessionStorage.getItem('userId');
 const sidebar = document.querySelector('.sidebar');
 const detailsView = document.getElementById('details');
 const logo = document.getElementById('logo');
+const logoutBtn = document.getElementById('logoutBtn');
 // Call Modal Elements
 const callModal = document.getElementById('incomingCallModal');
 const callerNameSpan = document.getElementById('callerName');
@@ -23,6 +24,10 @@ const messageModal = document.getElementById('incomingMessageModal');
 const messageSenderNameSpan = document.getElementById('messageSenderName');
 const viewChatBtn = document.getElementById('viewChatBtn');
 const closeMessageBtn = document.getElementById('closeMessageBtn');
+// Logout Modal Elements
+const logoutModal = document.getElementById('logoutModal');
+const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
+const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
 
 // --- Functions ---
 
@@ -77,6 +82,12 @@ async function checkForIncomingCalls() {
 
     try {
         const response = await fetch(`${API_BASE_URL}/signaling/get-sdp?userId=${currentUserId}`);
+        
+        // Silently ignore 404, as it's expected when there's no call
+        if (response.status === 404) {
+            return; 
+        }
+        
         if (response.ok) {
             const sdpData = await response.json();
             // An SDP offer indicates a new incoming call
@@ -92,9 +103,13 @@ async function checkForIncomingCalls() {
 
                 showIncomingCallPopup(sdpData.senderId, callerName, callType);
             }
+        } else {
+            // Log other, unexpected errors
+            console.error('Error checking for incoming calls:', response.statusText);
         }
     } catch (error) {
-        console.error('Error checking for incoming calls:', error);
+        // This will catch network errors
+        console.error('Network error while checking for calls:', error);
     }
 }
 
@@ -110,12 +125,30 @@ async function checkForNewMessages() {
         if (response.ok) {
             const unreadMessages = await response.json();
             if (unreadMessages.length > 0) {
-                // Find the first message from a sender who hasn't been snoozed
                 const newMessage = unreadMessages.find(msg => !snoozedSenders.has(msg.senderId));
                 
                 if (newMessage) {
-                    const sender = onlineUsers.find(u => u.userId === newMessage.senderId);
-                    const senderName = sender ? sender.username : 'Unknown User';
+                    // --- Get sender's name ---
+                    // First, try to find the user in the cached online list
+                    let sender = onlineUsers.find(u => u.userId === newMessage.senderId);
+                    let senderName;
+
+                    if (sender) {
+                        senderName = sender.username;
+                    } else {
+                        // If not in the online list, fetch user details directly from the backend
+                        try {
+                            const userResponse = await fetch(`${API_BASE_URL}/users/details?userId=${newMessage.senderId}`);
+                            if (userResponse.ok) {
+                                const userDetails = await userResponse.json();
+                                senderName = userDetails.username;
+                            } else {
+                                senderName = 'Unknown User'; // Fallback
+                            }
+                        } catch (e) {
+                            senderName = 'Unknown User';
+                        }
+                    }
                     showNewMessagePopup(newMessage.senderId, senderName);
                 }
             }
@@ -256,9 +289,14 @@ async function sendHeartbeat() {
  * Logs the user out.
  */
 async function handleLogout() {
+    logoutModal.style.display = 'flex';
+}
+
+async function confirmLogout() {
+    // Clear all intervals
     clearInterval(heartbeatInterval);
     clearInterval(callCheckInterval);
-    clearInterval(messageCheckInterval); // Stop checking for messages on logout
+    clearInterval(messageCheckInterval);
     try {
         await fetch(`${API_BASE_URL}/auth/logout`, {
             method: 'POST',
@@ -282,10 +320,16 @@ function initialize() {
 
         heartbeatInterval = setInterval(sendHeartbeat, 30000);
         callCheckInterval = setInterval(checkForIncomingCalls, 3000);
-        messageCheckInterval = setInterval(checkForNewMessages, 5000); // Check for messages every 5 seconds
+        messageCheckInterval = setInterval(checkForNewMessages, 5000);
+
+        // Event Listeners
+        logoutBtn.addEventListener('click', handleLogout);
+        confirmLogoutBtn.addEventListener('click', confirmLogout);
+        cancelLogoutBtn.addEventListener('click', () => {
+            logoutModal.style.display = 'none';
+        });
 
         window.selectUser = selectUser;
-        window.handleLogout = handleLogout;
         window.goTo = goTo;
         logo.addEventListener('click', () => {
             window.location.href = 'main.html';

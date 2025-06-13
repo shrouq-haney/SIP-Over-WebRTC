@@ -9,6 +9,7 @@ let localStream;
 let remoteAudio;
 let peerConnection;
 let signalingInterval;
+let pendingCandidates = []; // Queue for candidates that arrive early
 
 const STUN_SERVERS = {
     iceServers: [
@@ -21,6 +22,11 @@ const STUN_SERVERS = {
 const userNameSpan = document.getElementById('userName');
 const muteBtn = document.getElementById('muteBtn');
 const avatarText = document.querySelector('.avatar-text');
+const endCallBtn = document.getElementById('endCallBtn');
+// Modal Elements
+const endCallModal = document.getElementById('endCallModal');
+const confirmEndCallBtn = document.getElementById('confirmEndCallBtn');
+const cancelEndCallBtn = document.getElementById('cancelEndCallBtn');
 
 
 // --- Functions ---
@@ -80,43 +86,62 @@ function handleTrack(event) {
 
 async function startSignaling() {
     signalingInterval = setInterval(async () => {
+        // --- 1. Get remote ICE candidates ---
         const candidatesResponse = await fetch(`${API_BASE_URL}/signaling/get-candidates?userId=${currentUserId}`);
         if (candidatesResponse.ok) {
             const candidates = await candidatesResponse.json();
-            candidates.forEach(c => {
+            for (const c of candidates) {
                 if (c.candidate) {
-                    peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(c.candidate)))
-                        .catch(e => console.error("Error adding received ICE candidate", e));
+                    const iceCandidate = new RTCIceCandidate(JSON.parse(c.candidate));
+                    // If we already have a remote description, add the candidate immediately.
+                    // Otherwise, queue it for later.
+                    if (peerConnection.remoteDescription) {
+                        await peerConnection.addIceCandidate(iceCandidate).catch(e => console.error("Error adding ICE candidate", e));
+                    } else {
+                        pendingCandidates.push(iceCandidate);
+                    }
                 }
-            });
+            }
         }
 
+        // --- 2. Check for an incoming offer or answer ---
         const sdpResponse = await fetch(`${API_BASE_URL}/signaling/get-sdp?userId=${currentUserId}`);
-        if (sdpResponse.ok) {
-            const sdpData = await sdpResponse.json();
-            if (sdpData && sdpData.sdp) {
-                const sdp = JSON.parse(sdpData.sdp);
-                if (sdp.type === 'offer') {
-                    if (!peerConnection.currentRemoteDescription) {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
-                        const answer = await peerConnection.createAnswer();
-                        await peerConnection.setLocalDescription(answer);
-                        
-                        await fetch(`${API_BASE_URL}/signaling/send-sdp`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                senderId: currentUserId,
-                                receiverId: sdpData.senderId,
-                                sdp: JSON.stringify(answer)
-                            })
-                        });
-                    }
-                } else if (sdp.type === 'answer') {
-                    if (!peerConnection.currentRemoteDescription) {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
-                    }
-                }
+        
+        // Handle 404 quietly - it's expected when there's no call
+        if (sdpResponse.status === 404) {
+            return; // No new SDP, just continue
+        }
+        if (!sdpResponse.ok) {
+            console.error('Error fetching SDP:', sdpResponse.statusText);
+            return;
+        }
+        
+        const sdpData = await sdpResponse.json();
+        if (sdpData && sdpData.sdp && !peerConnection.currentRemoteDescription) {
+            const sdp = JSON.parse(sdpData.sdp);
+
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+            
+            // Now that the remote description is set, process any queued candidates
+            for (const candidate of pendingCandidates) {
+                await peerConnection.addIceCandidate(candidate).catch(e => console.error("Error adding queued ICE candidate", e));
+            }
+            pendingCandidates = []; // Clear the queue
+
+            // If we received an offer, we must create and send an answer
+            if (sdp.type === 'offer') {
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                await fetch(`${API_BASE_URL}/signaling/send-sdp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        senderId: currentUserId,
+                        receiverId: sdpData.senderId,
+                        sdp: JSON.stringify(answer)
+                    })
+                });
             }
         }
     }, 2000);
@@ -137,24 +162,48 @@ async function initiateCall() {
     });
 }
 
-function handleEndVoice() {
-    if (confirm('Are you sure you want to end this voice call?')) {
-        clearInterval(signalingInterval);
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-        }
-        if (peerConnection) {
-            peerConnection.close();
-        }
-        if (remoteAudio) {
-            remoteAudio.remove();
-        }
-        window.location.href = 'main.html';
+/**
+ * Cleans up all call-related resources.
+ */
+function cleanupCall() {
+    clearInterval(signalingInterval);
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
     }
+    if (peerConnection) {
+        peerConnection.close();
+    }
+    if (remoteAudio) {
+        remoteAudio.remove();
+    }
+    pendingCandidates = []; // Clear any pending candidates
+}
+
+function handleEndVoice() {
+    // Show the custom modal instead of a browser confirm
+    endCallModal.style.display = 'flex';
+}
+
+function confirmEndVoice() {
+    cleanupCall();
+    window.location.href = 'main.html';
 }
 
 async function handleLogout() {
-    handleEndVoice();
+    cleanupCall(); // End the call without confirmation
+    try {
+        await fetch(`${API_BASE_URL}/auth/logout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId })
+        });
+    } catch (error) {
+        console.error('Logout failed on server:', error);
+    } finally {
+        // Always clear session and redirect to login page
+        sessionStorage.clear();
+        window.location.href = 'login.html';
+    }
 }
 
 function toggleMute() {
@@ -181,8 +230,14 @@ async function initialize() {
         }
 
         muteBtn.addEventListener('click', toggleMute);
+        endCallBtn.addEventListener('click', handleEndVoice); // Show modal
+        
+        // Modal button listeners
+        confirmEndCallBtn.addEventListener('click', confirmEndVoice);
+        cancelEndCallBtn.addEventListener('click', () => {
+            endCallModal.style.display = 'none';
+        });
 
-        window.handleEndVoice = handleEndVoice;
         window.handleLogout = handleLogout;
     }
 }

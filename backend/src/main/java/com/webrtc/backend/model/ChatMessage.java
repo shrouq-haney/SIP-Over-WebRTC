@@ -2,6 +2,8 @@ package com.webrtc.backend.model;
 
 import java.sql.Timestamp;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 public class ChatMessage {
     private int id;
     private int senderId;
@@ -51,6 +53,7 @@ public class ChatMessage {
         this.read = read;
     }
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     public Timestamp getCreatedAt() {
         return createdAt;
     }

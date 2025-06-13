@@ -11,6 +11,15 @@ const WEBSOCKET_URL = `ws://localhost:8080/WebRTC_BackEnd/ws/chat/${currentUserI
 const chatMessagesContainer = document.getElementById('chatMessages');
 const messageInput = document.getElementById('messageInput');
 const userNameSpan = document.getElementById('userName');
+const endChatBtn = document.getElementById('endChatBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+// Modals
+const endChatModal = document.getElementById('endChatModal');
+const confirmEndChatBtn = document.getElementById('confirmEndChatBtn');
+const cancelEndChatBtn = document.getElementById('cancelEndChatBtn');
+const logoutModal = document.getElementById('logoutModal');
+const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
+const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
 
 // --- Functions ---
 
@@ -78,8 +87,11 @@ function displayMessage(msg) {
     const isSent = msg.senderId.toString() === currentUserId;
     messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
     
-    // Format the timestamp
-    const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // Format the timestamp to include date and time
+    const time = new Date(msg.timestamp).toLocaleString([], { 
+        year: 'numeric', month: 'short', day: 'numeric', 
+        hour: '2-digit', minute: '2-digit' 
+    });
 
     messageDiv.innerHTML = `
         <div class="message-content">
@@ -123,18 +135,24 @@ function sendMessage() {
  * Closes the chat and returns to the main page.
  */
 function handleEndChat() {
-    if (confirm('Are you sure you want to end this chat?')) {
-        if (websocket) {
-            websocket.close();
-        }
-        window.location.href = 'main.html';
+    endChatModal.style.display = 'flex';
+}
+
+function confirmEndChat() {
+    if (websocket) {
+        websocket.close();
     }
+    window.location.href = 'main.html';
 }
 
 /**
  * Logs the user out.
  */
 async function handleLogout() {
+    logoutModal.style.display = 'flex';
+}
+
+async function confirmLogout() {
     if (websocket) {
         websocket.close();
     }
@@ -160,22 +178,28 @@ function initialize() {
         userNameSpan.textContent = receiverName || 'User';
         connectWebSocket();
 
-        // Add event listener for the send button
         const sendButton = document.querySelector('.send-btn');
         if(sendButton) {
             sendButton.onclick = sendMessage;
         }
 
-        // Add event listener for the Enter key in the input field
         messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
+            if (e.key === 'Enter') sendMessage();
         });
 
-        // Make functions globally available for inline event handlers
-        window.handleEndChat = handleEndChat;
-        window.handleLogout = handleLogout;
+        // Event Listeners for buttons and modals
+        endChatBtn.addEventListener('click', handleEndChat);
+        logoutBtn.addEventListener('click', handleLogout);
+
+        confirmEndChatBtn.addEventListener('click', confirmEndChat);
+        cancelEndChatBtn.addEventListener('click', () => {
+            endChatModal.style.display = 'none';
+        });
+
+        confirmLogoutBtn.addEventListener('click', confirmLogout);
+        cancelLogoutBtn.addEventListener('click', () => {
+            logoutModal.style.display = 'none';
+        });
     }
 }
 

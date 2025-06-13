@@ -18,7 +18,19 @@ public class SendSdpServlet extends HttpServlet {
     private ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
+    protected void doOptions(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        // Handle CORS preflight request
+        resp.setHeader("Access-Control-Allow-Origin", "*");
+        resp.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE");
+        resp.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        resp.setStatus(HttpServletResponse.SC_OK);
+    }
+
+    @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        // Add CORS headers for the actual request
+        resp.setHeader("Access-Control-Allow-Origin", "*");
+        
         try {
             SdpExchange sdp = objectMapper.readValue(req.getReader(), SdpExchange.class);
             signalingDao.saveSdp(sdp);
