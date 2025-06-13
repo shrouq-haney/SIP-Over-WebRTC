@@ -86,28 +86,9 @@ function handleTrack(event) {
 
 async function startSignaling() {
     signalingInterval = setInterval(async () => {
-        // --- 1. Get remote ICE candidates ---
-        const candidatesResponse = await fetch(`${API_BASE_URL}/signaling/get-candidates?userId=${currentUserId}`);
-        if (candidatesResponse.ok) {
-            const candidates = await candidatesResponse.json();
-            for (const c of candidates) {
-                if (c.candidate) {
-                    const iceCandidate = new RTCIceCandidate(JSON.parse(c.candidate));
-                    // If we already have a remote description, add the candidate immediately.
-                    // Otherwise, queue it for later.
-                    if (peerConnection.remoteDescription) {
-                        await peerConnection.addIceCandidate(iceCandidate).catch(e => console.error("Error adding ICE candidate", e));
-                    } else {
-                        pendingCandidates.push(iceCandidate);
-                    }
-                }
-            }
-        }
-
-        // --- 2. Check for an incoming offer or answer ---
+        // Check for an incoming offer or answer
         const sdpResponse = await fetch(`${API_BASE_URL}/signaling/get-sdp?userId=${currentUserId}`);
         
-        // Handle 404 quietly - it's expected when there's no call
         if (sdpResponse.status === 404) {
             return; // No new SDP, just continue
         }
@@ -118,31 +99,43 @@ async function startSignaling() {
         
         const sdpData = await sdpResponse.json();
         if (sdpData && sdpData.sdp && !peerConnection.currentRemoteDescription) {
-            const sdp = JSON.parse(sdpData.sdp);
-
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+            const sdp = { type: sdpData.type, sdp: sdpData.sdp };
             
-            // Now that the remote description is set, process any queued candidates
-            for (const candidate of pendingCandidates) {
-                await peerConnection.addIceCandidate(candidate).catch(e => console.error("Error adding queued ICE candidate", e));
-            }
-            pendingCandidates = []; // Clear the queue
+            peerConnection.setRemoteDescription(new RTCSessionDescription(sdp))
+                .then(() => {
+                    console.log('Remote description set successfully.');
 
-            // If we received an offer, we must create and send an answer
-            if (sdp.type === 'offer') {
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                
-                await fetch(`${API_BASE_URL}/signaling/send-sdp`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        senderId: currentUserId,
-                        receiverId: sdpData.senderId,
-                        sdp: JSON.stringify(answer)
-                    })
-                });
-            }
+                    // Process bundled candidates that came with the SDP
+                    if (sdpData.candidates && sdpData.candidates.length > 0) {
+                        for (const candidate of sdpData.candidates) {
+                            if (candidate.candidate) {
+                                peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate.candidate)))
+                                    .catch(e => console.error("Error adding bundled ICE candidate", e));
+                            }
+                        }
+                    }
+
+                    // If we received an offer, create and send an answer
+                    if (sdp.type === 'offer') {
+                        peerConnection.createAnswer()
+                            .then(answer => peerConnection.setLocalDescription(answer))
+                            .then(() => {
+                                const localDesc = peerConnection.localDescription;
+                                fetch(`${API_BASE_URL}/signaling/send-sdp`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        senderId: currentUserId,
+                                        receiverId: sdpData.senderId,
+                                        sdp: localDesc.sdp,
+                                        type: localDesc.type
+                                    })
+                                });
+                            })
+                            .catch(e => console.error('Error creating answer:', e));
+                    }
+                })
+                .catch(e => console.error('Error setting remote description:', e));
         }
     }, 2000);
 }
@@ -151,13 +144,16 @@ async function initiateCall() {
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
 
+    // --- Send the offer ---
+    // The 'type' must be a top-level property
     await fetch(`${API_BASE_URL}/signaling/send-sdp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             senderId: currentUserId,
             receiverId: receiverId,
-            sdp: JSON.stringify(offer)
+            sdp: offer.sdp, // Just the SDP string
+            type: offer.type // 'type' as a top-level field
         })
     });
 }

@@ -55,12 +55,19 @@ header {
 }
 
 .details {
-    flex: 1;
+    flex-grow: 1;
     padding: 20px;
+    background-color: #f9f9f9;
+    border-left: 1px solid #ccc;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .buttons {
     display: flex;
+    flex-direction: row;
+    justify-content: center;
     gap: 15px;
     margin-top: 20px;
 }
@@ -219,4 +226,38 @@ h2 {
 
 .btn-secondary:hover {
     background-color: #5a6268;
+}
+
+/* Remove the specific alignment for the user-selected view */
+.user-details-content {
+    width: 100%;
+    text-align: center;
+}
+
+/* Welcome container styles */
+.welcome-container {
+    text-align: center;
+    color: #555;
+}
+
+.welcome-gif {
+    max-width: 300px;
+    border-radius: 15px;
+    margin-bottom: 20px;
+}
+
+/* Styles for the image shown when a user is selected */
+.choose-gif {
+    max-width: 250px;
+    margin: 15px 0;
+    border-radius: 10px;
+}
+
+.welcome-container h2 {
+    font-size: 1.8rem;
+    margin-bottom: 10px;
+}
+
+.welcome-container p {
+    font-size: 1.1rem;
 }

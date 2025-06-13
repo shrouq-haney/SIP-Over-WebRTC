@@ -14,33 +14,36 @@ import com.webrtc.backend.model.SdpExchange;
 
 @WebServlet("/api/signaling/get-sdp")
 public class GetSdpServlet extends HttpServlet {
-    private SignalingDao signalingDao = new SignalingDao();
-    private ObjectMapper objectMapper = new ObjectMapper();
+    private final SignalingDao signalingDao = new SignalingDao();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setHeader("Access-Control-Allow-Origin", "*");
+        String userIdParam = req.getParameter("userId");
+        if (userIdParam == null) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"error\": \"Missing userId parameter\"}");
+            return;
+        }
+
         try {
-            String userIdStr = req.getParameter("userId");
-            if (userIdStr == null) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("Missing userId parameter");
-                return;
-            }
-            int receiverId = Integer.parseInt(userIdStr);
-            SdpExchange sdp = signalingDao.getSdp(receiverId);
+            int userId = Integer.parseInt(userIdParam);
+            
+            // Use the new method that consumes the SDP
+            SdpExchange sdp = signalingDao.consumeSdpForUser(userId);
+
             if (sdp != null) {
+                // Found a new call notification, send it to the frontend
                 resp.setContentType("application/json");
-                objectMapper.writeValue(resp.getWriter(), sdp);
+                resp.getWriter().write(objectMapper.writeValueAsString(sdp));
             } else {
+                // This is the normal, successful case when there are no new calls
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
             }
         } catch (NumberFormatException e) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("Missing or invalid userId parameter");
-        } catch (Exception e) {
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            e.printStackTrace();
+            resp.getWriter().write("{\"error\": \"Invalid userId parameter\"}");
         }
     }
 } 

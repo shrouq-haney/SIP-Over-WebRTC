@@ -1,6 +1,7 @@
 package com.webrtc.backend.model;
 
 import java.sql.Timestamp;
+import java.util.List;
 
 public class SdpExchange {
     private int id;
@@ -10,6 +11,7 @@ public class SdpExchange {
     private String sdp;
     private CallStatus status;
     private Timestamp createdAt;
+    private List<IceCandidate> candidates;
 
     // Getters and Setters
     public int getId() {
@@ -66,5 +68,13 @@ public class SdpExchange {
 
     public void setCreatedAt(Timestamp createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public List<IceCandidate> getCandidates() {
+        return candidates;
+    }
+
+    public void setCandidates(List<IceCandidate> candidates) {
+        this.candidates = candidates;
     }
 } 

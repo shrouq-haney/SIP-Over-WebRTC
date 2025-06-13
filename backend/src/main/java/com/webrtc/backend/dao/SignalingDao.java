@@ -114,4 +114,82 @@ public class SignalingDao {
         }
         return candidates;
     }
+
+    public void deleteIceCandidates(int receiverId) throws SQLException {
+        String sql = "DELETE FROM ice_candidates WHERE receiver_id = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, receiverId);
+            stmt.executeUpdate();
+        }
+    }
+
+    /**
+     * Atomically retrieves and deletes the latest SDP offer for a user.
+     * This prevents the same call notification from being sent multiple times.
+     * @param userId The ID of the user receiving the call.
+     * @return The SdpExchange object if found, otherwise null.
+     */
+    public SdpExchange consumeSdpForUser(int userId) {
+        SdpExchange sdpData = null;
+        String selectSql = "SELECT * FROM sdp_exchange WHERE receiver_id = ? AND type = 'offer' ORDER BY created_at DESC LIMIT 1";
+        String deleteSql = "DELETE FROM sdp_exchange WHERE id = ?";
+        Connection conn = null;
+
+        try {
+            conn = DatabaseUtil.getConnection();
+            // Start a transaction to ensure the SELECT and DELETE happen together
+            conn.setAutoCommit(false);
+
+            // Step 1: Find the latest offer for the user
+            try (PreparedStatement selectPs = conn.prepareStatement(selectSql)) {
+                selectPs.setInt(1, userId);
+                try (ResultSet rs = selectPs.executeQuery()) {
+                    if (rs.next()) {
+                        sdpData = new SdpExchange();
+                        // Map all columns from your table here
+                        sdpData.setId(rs.getInt("id"));
+                        sdpData.setSenderId(rs.getInt("sender_id"));
+                        sdpData.setReceiverId(rs.getInt("receiver_id"));
+                        sdpData.setSdp(rs.getString("sdp"));
+                        sdpData.setType(SdpType.fromString(rs.getString("type")));
+                        sdpData.setCreatedAt(rs.getTimestamp("created_at"));
+                    }
+                }
+            }
+
+            // Step 2: If we found an offer, delete it so it's not sent again
+            if (sdpData != null) {
+                try (PreparedStatement deletePs = conn.prepareStatement(deleteSql)) {
+                    deletePs.setInt(1, sdpData.getId());
+                    deletePs.executeUpdate();
+                }
+            }
+            
+            // Finalize the transaction
+            conn.commit();
+
+        } catch (SQLException e) {
+            if (conn != null) {
+                try {
+                    conn.rollback(); // Undo changes if anything went wrong
+                } catch (SQLException ex) {
+                    ex.printStackTrace();
+                }
+            }
+            e.printStackTrace();
+            return null;
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        
+        return sdpData;
+    }
 } 

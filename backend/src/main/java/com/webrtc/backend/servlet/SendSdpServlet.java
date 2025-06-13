@@ -1,6 +1,7 @@
 package com.webrtc.backend.servlet;
 
 import java.io.IOException;
+import java.util.stream.Collectors;
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
@@ -32,7 +33,14 @@ public class SendSdpServlet extends HttpServlet {
         resp.setHeader("Access-Control-Allow-Origin", "*");
         
         try {
-            SdpExchange sdp = objectMapper.readValue(req.getReader(), SdpExchange.class);
+            // Read and log the raw JSON payload from the request
+            String jsonPayload = req.getReader().lines().collect(Collectors.joining(System.lineSeparator()));
+            System.out.println("--- RECEIVED SDP PAYLOAD ---");
+            System.out.println(jsonPayload);
+            System.out.println("--------------------------");
+
+            // Process the JSON from the string we just logged
+            SdpExchange sdp = objectMapper.readValue(jsonPayload, SdpExchange.class);
             signalingDao.saveSdp(sdp);
             resp.setStatus(HttpServletResponse.SC_OK);
         } catch (Exception e) {

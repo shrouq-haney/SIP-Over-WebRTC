@@ -83,18 +83,18 @@ async function checkForIncomingCalls() {
     try {
         const response = await fetch(`${API_BASE_URL}/signaling/get-sdp?userId=${currentUserId}`);
         
-        // Silently ignore 404, as it's expected when there's no call
         if (response.status === 404) {
-            return; 
+            return; // Expected when no call is waiting
         }
         
         if (response.ok) {
             const sdpData = await response.json();
-            // An SDP offer indicates a new incoming call
-            if (sdpData && sdpData.sdp && JSON.parse(sdpData.sdp).type === 'offer') {
-                const sdp = JSON.parse(sdpData.sdp).sdp;
-                // Determine call type by checking for video in the SDP
-                const isVideoCall = sdp.includes('m=video');
+            // An SDP with type 'offer' indicates a new incoming call.
+            // This now checks the top-level 'type' property correctly.
+            if (sdpData && sdpData.sdp && sdpData.type === 'offer') {
+                const sdpString = sdpData.sdp;
+                // Determine call type by checking for a video line in the SDP string
+                const isVideoCall = sdpString.includes('m=video');
                 const callType = isVideoCall ? 'video' : 'voice';
 
                 // Find caller's username from the cached list
@@ -104,11 +104,9 @@ async function checkForIncomingCalls() {
                 showIncomingCallPopup(sdpData.senderId, callerName, callType);
             }
         } else {
-            // Log other, unexpected errors
             console.error('Error checking for incoming calls:', response.statusText);
         }
     } catch (error) {
-        // This will catch network errors
         console.error('Network error while checking for calls:', error);
     }
 }
@@ -249,11 +247,14 @@ async function rejectCall(callerId) {
  */
 function selectUser(user) {
     detailsView.innerHTML = `
-        <h2>Talk to ${user.username}</h2>
-        <div class="buttons">
-            <button class="btn btn-video" onclick="goTo('video.html', ${user.userId}, '${user.username}')">📹 Video Call</button>
-            <button class="btn btn-voice" onclick="goTo('voice.html', ${user.userId}, '${user.username}')">📞 Voice Call</button>
-            <button class="btn btn-chat" onclick="goTo('chat.html', ${user.userId}, '${user.username}')">💬 Chat</button>
+        <div class="user-details-content">
+            <h2>Talk to ${user.username}</h2>
+            <img src="../images/choose.gif" alt="Choose an option" class="choose-gif"/>
+            <div class="buttons">
+                <button class="btn btn-video" onclick="goTo('video.html', ${user.userId}, '${user.username}')">📹 Video Call</button>
+                <button class="btn btn-voice" onclick="goTo('voice.html', ${user.userId}, '${user.username}')">📞 Voice Call</button>
+                <button class="btn btn-chat" onclick="goTo('chat.html', ${user.userId}, '${user.username}')">💬 Chat</button>
+            </div>
         </div>
     `;
 }

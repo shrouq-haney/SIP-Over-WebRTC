@@ -1,6 +1,8 @@
 package com.webrtc.backend.servlet;
 
 import java.io.IOException;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.servlet.ServletException;
@@ -30,13 +32,23 @@ public class GetCandidatesServlet extends HttpServlet {
             }
             int receiverId = Integer.parseInt(userIdStr);
             List<IceCandidate> candidates = signalingDao.getIceCandidates(receiverId);
-            resp.setContentType("application/json");
-            objectMapper.writeValue(resp.getWriter(), candidates);
+
+            if (candidates != null && !candidates.isEmpty()) {
+                resp.setContentType("application/json");
+                objectMapper.writeValue(resp.getWriter(), candidates);
+                // After sending the candidates, delete them to avoid resending
+                signalingDao.deleteIceCandidates(receiverId);
+            } else {
+                // If no candidates, send back an empty array
+                resp.setContentType("application/json");
+                objectMapper.writeValue(resp.getWriter(), new ArrayList<>());
+            }
         } catch (NumberFormatException e) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             resp.getWriter().write("Missing or invalid userId parameter");
-        } catch (Exception e) {
+        } catch (SQLException e) {
             resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            resp.getWriter().write("{\"error\": \"Database error fetching candidates\"}");
             e.printStackTrace();
         }
     }
