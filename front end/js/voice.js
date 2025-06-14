@@ -71,16 +71,16 @@ function createPeerConnection() {
 }
 
 function handleIceCandidate(event) {
-    if (event.candidate) {
-        fetch(`${API_BASE_URL}/signaling/send-candidate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+    if (event.candidate && websocket && websocket.readyState === WebSocket.OPEN) {
+        const message = {
+            payload: {
+                type: 'candidate',
                 senderId: currentUserId,
                 receiverId: receiverId,
                 candidate: JSON.stringify(event.candidate)
-            })
-        });
+            }
+        };
+        websocket.send(JSON.stringify(message));
     }
 }
 
@@ -135,106 +135,130 @@ async function handleIncomingOffer() {
     console.log("Answer sent to signaling server.");
 }
 
-async function startSignaling() {
-    // This interval now only needs to handle receiving the ANSWER for the original caller.
-    signalingInterval = setInterval(async () => {
-        // If we are already processing a signal, wait until it's done.
-        if (isSignalingInProgress) {
-            return;
-        }
+function connectWebSocket() {
+    const wsUrl = `ws://localhost:8080/WebRTC_BackEnd/signaling/${currentUserId}`;
+    websocket = new WebSocket(wsUrl);
 
-        // Check for an incoming offer or answer
-        const sdpResponse = await fetch(`${API_BASE_URL}/signaling/get-sdp?userId=${currentUserId}`);
+    return new Promise((resolve, reject) => {
+        websocket.onopen = () => {
+            console.log('Signaling WebSocket connected');
+            resolve();
+        };
+
+        websocket.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            const payload = message.payload;
+            
+            if (payload) {
+                switch (payload.type) {
+                    case 'offer':
+                        handleRemoteOffer(payload);
+                        break;
+                    case 'answer':
+                        handleRemoteAnswer(payload);
+                        break;
+                    case 'candidate':
+                        handleRemoteCandidate(payload);
+                        break;
+                    case 'hangup':
+                        if (payload.senderId.toString() === receiverId) {
+                            console.log("Received hangup via WebSocket. Cleaning up.");
+                            alert('The other user has ended the call.');
+                            hangupCallLocally();
+                            window.location.href = 'main.html';
+                        }
+                        break;
+                }
+            }
+        };
+
+        websocket.onclose = () => {
+            console.log('Signaling WebSocket closed.');
+            reject(new Error('WebSocket connection closed'));
+        };
         
-        if (peerConnection) {
-            console.log(`Polling... Current remote description is:`, peerConnection.currentRemoteDescription);
-        }
-        
-        if (sdpResponse.status === 404) {
-            return; // No new SDP, just continue
-        }
-        if (!sdpResponse.ok) {
-            console.error('Error fetching SDP:', sdpResponse.statusText);
-            return;
-        }
-        
-        const sdpData = await sdpResponse.json();
-
-        // Check for a hangup or rejection signal from the other user
-        if (sdpData.status === 'hangup' || sdpData.status === 'rejected') {
-            console.log("Received hangup/reject signal from other user.");
-            alert('The other user has ended the call.');
-            hangupCallLocally(); // Clean up without sending another hangup signal
-            window.location.href = 'main.html';
-            return;
-        }
-        
-        if (sdpData && sdpData.sdp && !peerConnection.currentRemoteDescription) {
-            isSignalingInProgress = true; // Acquire lock
-            const sdp = { type: sdpData.type, sdp: sdpData.sdp };
-
-            console.log(`Received SDP of type '${sdp.type}'. Processing...`);
-
-            peerConnection.setRemoteDescription(new RTCSessionDescription(sdp))
-                .then(() => {
-                    console.log('Remote description set successfully.');
-
-                    // The receiver now handles the offer from session storage.
-                    // This logic is now only for the CALLER receiving the ANSWER.
-                    if (sdp.type === 'answer') {
-                        console.log("SDP type is 'answer'. Call should be established.");
-                        isSignalingInProgress = false; // Release lock
-                    }
-                })
-                .catch(e => {
-                    console.error('CRITICAL: Error setting remote description.', e);
-                    console.error('SDP that caused the error:', sdp);
-                    isSignalingInProgress = false; // Release lock on critical error
-                });
-        }
-    }, 2000);
-}
-
-async function initiateCall() {
-    console.log("This client is the caller. Creating an offer...");
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-
-    // --- Send the offer ---
-    // The 'type' must be a top-level property
-    console.log("Offer created and local description set. Sending offer to server for receiver:", receiverId);
-    await fetch(`${API_BASE_URL}/signaling/send-sdp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            senderId: currentUserId,
-            receiverId: receiverId,
-            sdp: offer.sdp, // Just the SDP string
-            type: offer.type // 'type' as a top-level field
-        })
+        websocket.onerror = (error) => {
+            console.error('Signaling WebSocket error:', error);
+            reject(error);
+        };
     });
 }
 
-/**
- * Connects to the WebSocket server for real-time events like hangup.
- */
-function connectWebSocket() {
-    const wsUrl = `ws://localhost:8080/WebRTC_BackEnd/ws/chat/${currentUserId}`;
-    websocket = new WebSocket(wsUrl);
-
-    websocket.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        // Listen for a hangup message from the other user
-        if (message.type === 'hangup' && message.senderId.toString() === receiverId) {
-            console.log("Received hangup via WebSocket. Cleaning up.");
-            alert('The other user has ended the call.');
-            hangupCallLocally();
-            window.location.href = 'main.html';
+async function handleRemoteOffer(payload) {
+    if (!peerConnection.currentRemoteDescription) {
+        try {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription({
+                type: 'offer',
+                sdp: payload.sdp
+            }));
+            
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            // Send answer through WebSocket
+            const message = {
+                payload: {
+                    type: 'answer',
+                    senderId: currentUserId,
+                    receiverId: payload.senderId,
+                    sdp: answer.sdp
+                }
+            };
+            websocket.send(JSON.stringify(message));
+        } catch (e) {
+            console.error('Error handling remote offer:', e);
         }
-    };
+    }
+}
 
-    websocket.onclose = () => console.log('Notification WebSocket closed.');
-    websocket.onerror = (error) => console.error('Notification WebSocket error:', error);
+async function handleRemoteAnswer(payload) {
+    if (!peerConnection.currentRemoteDescription) {
+        try {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription({
+                type: 'answer',
+                sdp: payload.sdp
+            }));
+        } catch (e) {
+            console.error('Error handling remote answer:', e);
+        }
+    }
+}
+
+async function handleRemoteCandidate(payload) {
+    try {
+        const candidate = JSON.parse(payload.candidate);
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (e) {
+        console.error('Error adding ICE candidate:', e);
+    }
+}
+
+async function initiateCall() {
+    try {
+        console.log("This client is the caller. Creating an offer...");
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+
+        // Wait for WebSocket to be ready
+        if (websocket.readyState !== WebSocket.OPEN) {
+            console.log("Waiting for WebSocket connection...");
+            await connectWebSocket();
+        }
+
+        // Send offer through WebSocket
+        const message = {
+            payload: {
+                type: 'offer',
+                senderId: currentUserId,
+                receiverId: receiverId,
+                sdp: offer.sdp
+            }
+        };
+        websocket.send(JSON.stringify(message));
+    } catch (error) {
+        console.error('Error initiating call:', error);
+        alert('Failed to initiate call. Please try again.');
+    }
 }
 
 /**
@@ -259,16 +283,16 @@ function hangupCallLocally() {
  * Notifies the backend that the call has ended and cleans up local resources.
  */
 function hangupCall() {
-    // Notify the backend that the call has ended
-    fetch(`${API_BASE_URL}/signaling/hangup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            user1: currentUserId,
-            user2: receiverId
-        })
-    }).catch(e => console.error("Failed to send hangup signal:", e));
-
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+        const message = {
+            payload: {
+                type: 'hangup',
+                senderId: currentUserId,
+                receiverId: receiverId
+            }
+        };
+        websocket.send(JSON.stringify(message));
+    }
     hangupCallLocally();
 }
 
@@ -314,30 +338,34 @@ async function initialize() {
             avatarText.textContent = receiverName[0].toUpperCase();
         }
         
-        await setupMedia();
-        createPeerConnection();
-        startSignaling();
-        connectWebSocket(); // Connect to WebSocket for notifications
-        
-        const urlParams = new URLSearchParams(window.location.search);
-        const isCaller = urlParams.get('isCaller') === 'true';
+        try {
+            await setupMedia();
+            createPeerConnection();
+            await connectWebSocket(); // Wait for WebSocket connection
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const isCaller = urlParams.get('isCaller') === 'true';
 
-        if (isCaller) {
-            initiateCall();
-        } else {
-            handleIncomingOffer();
+            if (isCaller) {
+                await initiateCall();
+            } else {
+                handleIncomingOffer();
+            }
+
+            muteBtn.addEventListener('click', toggleMute);
+            endCallBtn.addEventListener('click', handleEndVoice);
+            
+            // Modal button listeners
+            confirmEndCallBtn.addEventListener('click', confirmEndVoice);
+            cancelEndCallBtn.addEventListener('click', () => {
+                endCallModal.style.display = 'none';
+            });
+
+            window.handleLogout = handleLogout;
+        } catch (error) {
+            console.error('Error during initialization:', error);
+            alert('Failed to initialize call. Please try again.');
         }
-
-        muteBtn.addEventListener('click', toggleMute);
-        endCallBtn.addEventListener('click', handleEndVoice); // Show modal
-        
-        // Modal button listeners
-        confirmEndCallBtn.addEventListener('click', confirmEndVoice);
-        cancelEndCallBtn.addEventListener('click', () => {
-            endCallModal.style.display = 'none';
-        });
-
-        window.handleLogout = handleLogout;
     }
 }
 

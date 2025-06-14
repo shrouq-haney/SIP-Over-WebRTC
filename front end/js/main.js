@@ -9,6 +9,9 @@ let onlineUsers = []; // Cache for online users
 const currentUserId = sessionStorage.getItem('userId');
 let currentRingingSenderId = null; // Track who is currently calling
 let isAudioUnlocked = false; // To track if user interaction has occurred
+let websocket; // Add WebSocket variable
+let currentUsername = sessionStorage.getItem('username');
+let lastMessageCheck = 0; // Add timestamp for last message check
 
 // --- DOM Elements ---
 const sidebar = document.querySelector('.sidebar');
@@ -30,7 +33,10 @@ const closeMessageBtn = document.getElementById('closeMessageBtn');
 const logoutModal = document.getElementById('logoutModal');
 const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
 const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
-const ringtone = document.getElementById('ringtone');
+// Audio Elements
+const voiceRingtone = document.getElementById('ringtone');
+const videoRingtone = document.getElementById('videoRingtone');
+const messageSound = document.getElementById('messageSound');
 
 // --- Functions ---
 
@@ -136,60 +142,142 @@ async function fetchAndDisplayOnlineUsers() {
 }
 
 /**
- * Stops the ringtone sound.
+ * Plays a notification sound.
+ * @param {HTMLAudioElement} sound - The audio element to play
+ * @param {boolean} loop - Whether the sound should loop
  */
-function stopRingtone() {
-    if (ringtone) {
-        ringtone.pause();
-        ringtone.currentTime = 0;
+function playNotificationSound(sound, loop = false) {
+    if (!sound) return;
+
+    // Reset the sound
+    sound.pause();
+    sound.currentTime = 0;
+    sound.loop = loop;
+
+    // Try to play immediately
+    const playAttempt = () => {
+        const playPromise = sound.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.error('Error playing sound:', error);
+                // If autoplay is blocked, try to unlock audio
+                const unlockAudio = () => {
+                    sound.play().then(() => {
+                        sound.pause();
+                        sound.currentTime = 0;
+                        isAudioUnlocked = true;
+                        if (loop) {
+                            sound.play();
+                        }
+                    }).catch(e => console.error('Failed to unlock audio:', e));
+                };
+                // Try to unlock on any user interaction
+                document.addEventListener('click', unlockAudio, { once: true });
+                document.addEventListener('touchstart', unlockAudio, { once: true });
+                document.addEventListener('keydown', unlockAudio, { once: true });
+            });
+        }
+    };
+
+    // Try to play immediately
+    playAttempt();
+
+    // Also try again after a short delay
+    setTimeout(playAttempt, 100);
+}
+
+/**
+ * Stops all notification sounds.
+ */
+function stopAllSounds() {
+    if (voiceRingtone) {
+        voiceRingtone.pause();
+        voiceRingtone.currentTime = 0;
+    }
+    if (videoRingtone) {
+        videoRingtone.pause();
+        videoRingtone.currentTime = 0;
+    }
+    if (messageSound) {
+        messageSound.pause();
+        messageSound.currentTime = 0;
     }
 }
 
 /**
- * Periodically checks for incoming calls.
+ * Connects to the WebSocket for signaling.
  */
-async function checkForIncomingCalls() {
-    // Don't check for calls if any modal is already open
+function connectWebSocket() {
+    const wsUrl = `ws://localhost:8080/WebRTC_BackEnd/signaling/${currentUserId}`;
+    websocket = new WebSocket(wsUrl);
+
+    websocket.onopen = () => {
+        console.log('Signaling WebSocket connected');
+    };
+        
+    websocket.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        const payload = message.payload;
+        
+        if (payload) {
+            switch (payload.type) {
+                case 'offer':
+                    handleIncomingCall(payload);
+                    break;
+                case 'hangup':
+                    if (currentRingingSenderId === payload.senderId) {
+                        console.log("Call was ended by the caller");
+                        hideIncomingCallPopup();
+                    }
+                    break;
+            }
+        }
+    };
+
+    websocket.onclose = () => {
+        console.log('Signaling WebSocket closed');
+        // Try to reconnect after a short delay
+        setTimeout(connectWebSocket, 3000);
+    };
+
+    websocket.onerror = (error) => {
+        console.error('Signaling WebSocket error:', error);
+    };
+}
+
+/**
+ * Handles incoming calls from WebSocket.
+ * @param {object} payload - The incoming call payload.
+ */
+function handleIncomingCall(payload) {
+    // Don't show if any modal is already open
     if (callModal.style.display === 'flex' || messageModal.style.display === 'flex') return;
 
-    try {
-        const response = await fetch(`${API_BASE_URL}/signaling/get-sdp?userId=${currentUserId}`);
+    // If a call is already ringing, ignore new calls
+    if (currentRingingSenderId) return;
 
-        if (response.status === 404) {
-            // This means no call is waiting. If a call was ringing, it means the caller cancelled.
-            if (currentRingingSenderId) {
-                console.log(`Call from ${currentRingingSenderId} was canceled or rejected.`);
-                hideIncomingCallPopup(); // This will also stop the ringtone
-            }
-            return;
-        }
+    currentRingingSenderId = payload.senderId;
+    const isVideoCall = payload.sdp.includes('m=video');
+    const callType = isVideoCall ? 'video' : 'voice';
 
-        if (response.ok) {
-            const sdpData = await response.json();
-            // An SDP with type 'offer' indicates a new incoming call.
-            if (sdpData && sdpData.sdp && sdpData.type === 'offer') {
-                // If a call is already ringing, ignore new calls for now.
-                if (currentRingingSenderId) return;
+    // Store the offer in session storage for the call page
+    sessionStorage.setItem('incomingSdpOffer', JSON.stringify(payload));
 
-                // Store the entire offer payload in session storage for the call page to use.
-                // This is crucial for passing the offer from this page to the next.
-                sessionStorage.setItem('incomingSdpOffer', JSON.stringify(sdpData));
-
-                currentRingingSenderId = sdpData.senderId;
-                const sdpString = sdpData.sdp;
-                const isVideoCall = sdpString.includes('m=video');
-                const callType = isVideoCall ? 'video' : 'voice';
-
-                const caller = onlineUsers.find(u => u.userId === sdpData.senderId);
-                const callerName = caller ? caller.username : 'Unknown Caller';
-
-                showIncomingCallPopup(sdpData.senderId, callerName, callType);
-            }
-        } else {
-            console.error('Error checking for incoming calls:', response.statusText);
-        }
-    } catch (error) {
-        console.error('Network error while checking for calls:', error);
+    // Fetch caller details if not in onlineUsers
+    const caller = onlineUsers.find(u => u.userId.toString() === payload.senderId.toString());
+    if (caller) {
+        showIncomingCallPopup(payload.senderId, caller.username, callType);
+    } else {
+        // If caller not in onlineUsers, fetch their details
+        fetch(`${API_BASE_URL}/users/details?userId=${payload.senderId}`)
+            .then(response => response.json())
+            .then(userDetails => {
+                showIncomingCallPopup(payload.senderId, userDetails.username, callType);
+            })
+            .catch(error => {
+                console.error('Error fetching caller details:', error);
+                showIncomingCallPopup(payload.senderId, 'Unknown Caller', callType);
+            });
     }
 }
 
@@ -197,58 +285,67 @@ async function checkForIncomingCalls() {
  * Periodically checks for new, unread messages.
  */
 async function checkForNewMessages() {
+    // Don't check if modals are open
     if (callModal.style.display === 'flex' || messageModal.style.display === 'flex') return;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/chat/unread?userId=${currentUserId}`);
+        // Add timestamp to prevent caching
+        const timestamp = new Date().getTime();
+        const response = await fetch(`${API_BASE_URL}/chat/unread?userId=${currentUserId}&t=${timestamp}`);
+        
         if (response.ok) {
             const rawData = await response.json();
             
-            // Exit if there's no data.
+            // Exit if there's no data
             if (!rawData || (typeof rawData === 'object' && Object.keys(rawData).length === 0)) {
                 return;
             }
 
-            // Standardize the API response to always be an array.
+            // Standardize the API response to always be an array
             const unreadMessages = Array.isArray(rawData) ? rawData : [rawData];
 
             if (unreadMessages.length > 0) {
-                // Get the list of users we have already shown a popup for from session storage.
+                // Get the list of users we have already shown a popup for from session storage
                 const notifiedSenders = new Set(JSON.parse(sessionStorage.getItem('notifiedSenders') || '[]'));
                 
-                // Find the first message from a user we haven't notified yet.
-                // Ensure we compare numbers with numbers for consistency.
-                const newMessage = unreadMessages.find(msg => msg && !notifiedSenders.has(Number(msg.senderId)));
-                
-                if (newMessage) {
-                    // Mark this sender as notified for this session BEFORE showing the popup.
-                    // Also ensure we add a number to the set.
+                // Find messages from users we haven't notified yet
+                const newMessages = unreadMessages.filter(msg => 
+                    msg && !notifiedSenders.has(Number(msg.senderId))
+                );
+
+                for (const newMessage of newMessages) {
+                    // Mark this sender as notified
                     notifiedSenders.add(Number(newMessage.senderId));
-                    sessionStorage.setItem('notifiedSenders', JSON.stringify(Array.from(notifiedSenders)));
                     
-                    // --- Get sender's name ---
-                    // First, try to find the user in the cached online list
+                    // Get sender's name
                     let sender = onlineUsers.find(u => u.userId === newMessage.senderId);
                     let senderName;
 
                     if (sender) {
                         senderName = sender.username;
                     } else {
-                        // If not in the online list, fetch user details directly from the backend
                         try {
                             const userResponse = await fetch(`${API_BASE_URL}/users/details?userId=${newMessage.senderId}`);
                             if (userResponse.ok) {
                                 const userDetails = await userResponse.json();
                                 senderName = userDetails.username;
                             } else {
-                                senderName = 'Unknown User'; // Fallback
+                                senderName = 'Unknown User';
                             }
                         } catch (e) {
                             senderName = 'Unknown User';
                         }
                     }
+
+                    // Show notification immediately
                     showNewMessagePopup(newMessage.senderId, senderName);
+                    
+                    // Update unread count
+                    updateUnreadCount(newMessage.senderId, newMessage.unreadCount || 0);
                 }
+
+                // Save updated notified senders
+                sessionStorage.setItem('notifiedSenders', JSON.stringify(Array.from(notifiedSenders)));
             }
         }
     } catch (error) {
@@ -269,11 +366,11 @@ function showIncomingCallPopup(callerId, name, callType) {
     callTypeSpan.textContent = callType;
     callModal.style.display = 'flex';
 
-    if (ringtone && isAudioUnlocked) {
-        ringtone.play().catch(e => console.error("Ringtone play failed:", e));
-    }
+    // Play appropriate ringtone based on call type
+    const ringtone = callType === 'video' ? videoRingtone : voiceRingtone;
+    playNotificationSound(ringtone, true);
 
-    // Set up button actions, ensuring they are configured for THIS specific call
+    // Set up button actions
     acceptBtn.onclick = () => acceptCall(callerId, name, callType);
     rejectBtn.onclick = () => rejectCall(callerId);
 }
@@ -281,19 +378,27 @@ function showIncomingCallPopup(callerId, name, callType) {
 /**
  * Displays the new message popup.
  */
-function showNewMessagePopup(senderId, name) {
-    messageSenderNameSpan.textContent = name;
+function showNewMessagePopup(senderId, senderName) {
+    // Stop any existing sounds first
+    stopAllSounds();
+    
+    // Update the modal content
+    messageSenderNameSpan.textContent = senderName;
+    
+    // Show the modal
     messageModal.style.display = 'flex';
-
+    
+    // Play the message sound immediately
+    playNotificationSound(messageSound, false);
+    
+    // Set up button actions
     viewChatBtn.onclick = () => {
-        // Simply go to the chat. The notification state is reset when the chat page loads.
-        goTo('chat.html', senderId, name);
-        hideNewMessagePopup();
+        goTo('chat.html', senderId, senderName);
+        hideMessagePopup();
     };
-
+    
     closeMessageBtn.onclick = () => {
-        // Simply hide the popup. The user is already marked as notified.
-        hideNewMessagePopup();
+        hideMessagePopup();
     };
 }
 
@@ -302,15 +407,16 @@ function showNewMessagePopup(senderId, name) {
  */
 function hideIncomingCallPopup() {
     callModal.style.display = 'none';
-    stopRingtone();
+    stopAllSounds();
     currentRingingSenderId = null; // Reset the ringing state
 }
 
 /**
  * Hides the new message popup.
  */
-function hideNewMessagePopup() {
+function hideMessagePopup() {
     messageModal.style.display = 'none';
+    stopAllSounds();
 }
 
 /**
@@ -320,7 +426,7 @@ function hideNewMessagePopup() {
  * @param {string} callType - The type of call ('video' or 'voice').
  */
 function acceptCall(callerId, callerName, callType) {
-    stopRingtone();
+    stopAllSounds();
     // Store the caller's info to be used on the next page
     sessionStorage.setItem('receiverId', callerId);
     sessionStorage.setItem('receiverName', callerName);
@@ -426,7 +532,7 @@ async function confirmLogout() {
     clearInterval(callCheckInterval);
     clearInterval(messageCheckInterval);
     clearInterval(unreadCountInterval);
-    stopRingtone();
+    stopAllSounds();
 
     try {
         await fetch(`${API_BASE_URL}/auth/logout`, {
@@ -446,41 +552,42 @@ async function confirmLogout() {
 
 function initialize() {
     if (protectPage()) {
-        // A fix for browser autoplay policies. The first user click on the page
-        // will "unlock" the audio, allowing the ringtone to play later.
+        // Try to unlock audio immediately when the page loads
         const unlockAudio = () => {
-            if (ringtone) {
-                const promise = ringtone.play();
-                if (promise !== undefined) {
-                    promise.then(() => {
-                        ringtone.pause();
-                        ringtone.currentTime = 0;
-                        isAudioUnlocked = true; // Audio is now unlocked
-                        console.log("Audio unlocked by user interaction.");
-                    }).catch(() => {
-                        // Play failed, probably because audio source is still not valid
-                        isAudioUnlocked = false;
-                    });
+            const sounds = [voiceRingtone, videoRingtone, messageSound];
+            sounds.forEach(sound => {
+                if (sound) {
+                    const promise = sound.play();
+                    if (promise !== undefined) {
+                        promise.then(() => {
+                            sound.pause();
+                            sound.currentTime = 0;
+                            isAudioUnlocked = true;
+                            console.log("Audio unlocked by user interaction.");
+                        }).catch(() => {
+                            isAudioUnlocked = false;
+                        });
+                    }
                 }
-            }
-            // Remove the event listener after it has run once.
-            document.body.removeEventListener('click', unlockAudio);
-            document.body.removeEventListener('touchstart', unlockAudio);
+            });
         };
-        document.body.addEventListener('click', unlockAudio);
-        document.body.addEventListener('touchstart', unlockAudio); // For mobile devices
+
+        // Try to unlock audio on any user interaction
+        document.addEventListener('click', unlockAudio);
+        document.addEventListener('touchstart', unlockAudio);
+        document.addEventListener('keydown', unlockAudio);
 
         // Run once immediately, then set intervals
         fetchAndDisplayOnlineUsers(); 
         sendHeartbeat();
-        checkForIncomingCalls();
+        connectWebSocket();
         checkForNewMessages();
 
-        setInterval(fetchAndDisplayOnlineUsers, 10000); // Refreshes users and then updates counts
+        setInterval(fetchAndDisplayOnlineUsers, 10000);
         heartbeatInterval = setInterval(sendHeartbeat, 30000);
-        callCheckInterval = setInterval(checkForIncomingCalls, 3000);
-        messageCheckInterval = setInterval(checkForNewMessages, 5000);
-        unreadCountInterval = setInterval(updateUnreadCounts, 10000); // Check unread counts
+        // Check for new messages every 2 seconds
+        messageCheckInterval = setInterval(checkForNewMessages, 2000);
+        unreadCountInterval = setInterval(updateUnreadCounts, 10000);
 
         // Event Listeners
         logoutBtn.addEventListener('click', handleLogout);
