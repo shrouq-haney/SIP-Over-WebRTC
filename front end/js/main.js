@@ -7,6 +7,8 @@ let messageCheckInterval;
 let unreadCountInterval; // Interval for checking unread counts
 let onlineUsers = []; // Cache for online users
 const currentUserId = sessionStorage.getItem('userId');
+let currentRingingSenderId = null; // Track who is currently calling
+let isAudioUnlocked = false; // To track if user interaction has occurred
 
 // --- DOM Elements ---
 const sidebar = document.querySelector('.sidebar');
@@ -28,6 +30,7 @@ const closeMessageBtn = document.getElementById('closeMessageBtn');
 const logoutModal = document.getElementById('logoutModal');
 const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
 const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
+const ringtone = document.getElementById('ringtone');
 
 // --- Functions ---
 
@@ -133,6 +136,16 @@ async function fetchAndDisplayOnlineUsers() {
 }
 
 /**
+ * Stops the ringtone sound.
+ */
+function stopRingtone() {
+    if (ringtone) {
+        ringtone.pause();
+        ringtone.currentTime = 0;
+    }
+}
+
+/**
  * Periodically checks for incoming calls.
  */
 async function checkForIncomingCalls() {
@@ -141,22 +154,32 @@ async function checkForIncomingCalls() {
 
     try {
         const response = await fetch(`${API_BASE_URL}/signaling/get-sdp?userId=${currentUserId}`);
-        
+
         if (response.status === 404) {
-            return; // Expected when no call is waiting
+            // This means no call is waiting. If a call was ringing, it means the caller cancelled.
+            if (currentRingingSenderId) {
+                console.log(`Call from ${currentRingingSenderId} was canceled or rejected.`);
+                hideIncomingCallPopup(); // This will also stop the ringtone
+            }
+            return;
         }
-        
+
         if (response.ok) {
             const sdpData = await response.json();
             // An SDP with type 'offer' indicates a new incoming call.
-            // This now checks the top-level 'type' property correctly.
             if (sdpData && sdpData.sdp && sdpData.type === 'offer') {
+                // If a call is already ringing, ignore new calls for now.
+                if (currentRingingSenderId) return;
+
+                // Store the entire offer payload in session storage for the call page to use.
+                // This is crucial for passing the offer from this page to the next.
+                sessionStorage.setItem('incomingSdpOffer', JSON.stringify(sdpData));
+
+                currentRingingSenderId = sdpData.senderId;
                 const sdpString = sdpData.sdp;
-                // Determine call type by checking for a video line in the SDP string
                 const isVideoCall = sdpString.includes('m=video');
                 const callType = isVideoCall ? 'video' : 'voice';
 
-                // Find caller's username from the cached list
                 const caller = onlineUsers.find(u => u.userId === sdpData.senderId);
                 const callerName = caller ? caller.username : 'Unknown Caller';
 
@@ -237,12 +260,22 @@ async function checkForNewMessages() {
  * Displays the incoming call popup.
  */
 function showIncomingCallPopup(callerId, name, callType) {
+    const callerNameSpan = document.getElementById('callerName');
+    const callTypeSpan = document.getElementById('callType');
+    const acceptBtn = document.getElementById('acceptCallBtn');
+    const rejectBtn = document.getElementById('rejectCallBtn');
+
     callerNameSpan.textContent = name;
     callTypeSpan.textContent = callType;
     callModal.style.display = 'flex';
 
-    acceptCallBtn.onclick = () => acceptCall(callerId, name, callType);
-    rejectCallBtn.onclick = () => rejectCall(callerId);
+    if (ringtone && isAudioUnlocked) {
+        ringtone.play().catch(e => console.error("Ringtone play failed:", e));
+    }
+
+    // Set up button actions, ensuring they are configured for THIS specific call
+    acceptBtn.onclick = () => acceptCall(callerId, name, callType);
+    rejectBtn.onclick = () => rejectCall(callerId);
 }
 
 /**
@@ -265,10 +298,12 @@ function showNewMessagePopup(senderId, name) {
 }
 
 /**
- * Hides the incoming call popup.
+ * Hides the incoming call popup and stops the ringtone.
  */
 function hideIncomingCallPopup() {
     callModal.style.display = 'none';
+    stopRingtone();
+    currentRingingSenderId = null; // Reset the ringing state
 }
 
 /**
@@ -285,6 +320,7 @@ function hideNewMessagePopup() {
  * @param {string} callType - The type of call ('video' or 'voice').
  */
 function acceptCall(callerId, callerName, callType) {
+    stopRingtone();
     // Store the caller's info to be used on the next page
     sessionStorage.setItem('receiverId', callerId);
     sessionStorage.setItem('receiverName', callerName);
@@ -301,19 +337,22 @@ function acceptCall(callerId, callerName, callType) {
  * @param {number} callerId - The ID of the user who initiated the call.
  */
 async function rejectCall(callerId) {
+    console.log(`Rejecting call from ${callerId}`);
+    hideIncomingCallPopup(); // Hide UI and stop ringtone immediately
+
     try {
+        // Notify the server that the call was rejected.
+        // This allows the caller to know their call was not answered.
         await fetch(`${API_BASE_URL}/signaling/reject-call`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                senderId: callerId,       // The one who started the call
+                senderId: callerId, // The one who sent the offer
                 receiverId: currentUserId // The one who is rejecting
             })
         });
     } catch (error) {
-        console.error('Failed to reject call on server:', error);
-    } finally {
-        hideIncomingCallPopup();
+        console.error('Error sending rejection signal:', error);
     }
 }
 
@@ -344,7 +383,14 @@ function selectUser(user) {
 function goTo(page, userId, username) {
     sessionStorage.setItem('receiverId', userId);
     sessionStorage.setItem('receiverName', username);
-    window.location.href = `${page}?user=${userId}`;
+
+    // For calls, we mark this user as the one initiating the call.
+    // This helps the call page decide who sends the 'offer'.
+    if (page.includes('video.html') || page.includes('voice.html')) {
+        window.location.href = `${page}?user=${userId}&isCaller=true`;
+    } else {
+        window.location.href = `${page}?user=${userId}`;
+    }
 }
 
 /**
@@ -363,17 +409,25 @@ async function sendHeartbeat() {
 }
 
 /**
- * Logs the user out.
+ * Shows the logout confirmation modal.
  */
-async function handleLogout() {
+function handleLogout() {
     logoutModal.style.display = 'flex';
 }
 
+/**
+ * Logs the user out.
+ * This is called when the user confirms the action in the modal.
+ */
 async function confirmLogout() {
+    console.log("Logging out...");
     // Clear all intervals
     clearInterval(heartbeatInterval);
     clearInterval(callCheckInterval);
     clearInterval(messageCheckInterval);
+    clearInterval(unreadCountInterval);
+    stopRingtone();
+
     try {
         await fetch(`${API_BASE_URL}/auth/logout`, {
             method: 'POST',
@@ -381,7 +435,7 @@ async function confirmLogout() {
             body: JSON.stringify({ userId: currentUserId })
         });
     } catch (error) {
-        console.error('Logout failed on server:', error);
+        console.error("Logout failed on server:", error);
     } finally {
         sessionStorage.clear();
         window.location.href = 'login.html';
@@ -392,6 +446,30 @@ async function confirmLogout() {
 
 function initialize() {
     if (protectPage()) {
+        // A fix for browser autoplay policies. The first user click on the page
+        // will "unlock" the audio, allowing the ringtone to play later.
+        const unlockAudio = () => {
+            if (ringtone) {
+                const promise = ringtone.play();
+                if (promise !== undefined) {
+                    promise.then(() => {
+                        ringtone.pause();
+                        ringtone.currentTime = 0;
+                        isAudioUnlocked = true; // Audio is now unlocked
+                        console.log("Audio unlocked by user interaction.");
+                    }).catch(() => {
+                        // Play failed, probably because audio source is still not valid
+                        isAudioUnlocked = false;
+                    });
+                }
+            }
+            // Remove the event listener after it has run once.
+            document.body.removeEventListener('click', unlockAudio);
+            document.body.removeEventListener('touchstart', unlockAudio);
+        };
+        document.body.addEventListener('click', unlockAudio);
+        document.body.addEventListener('touchstart', unlockAudio); // For mobile devices
+
         // Run once immediately, then set intervals
         fetchAndDisplayOnlineUsers(); 
         sendHeartbeat();
@@ -402,6 +480,7 @@ function initialize() {
         heartbeatInterval = setInterval(sendHeartbeat, 30000);
         callCheckInterval = setInterval(checkForIncomingCalls, 3000);
         messageCheckInterval = setInterval(checkForNewMessages, 5000);
+        unreadCountInterval = setInterval(updateUnreadCounts, 10000); // Check unread counts
 
         // Event Listeners
         logoutBtn.addEventListener('click', handleLogout);

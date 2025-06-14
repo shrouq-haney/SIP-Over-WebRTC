@@ -125,14 +125,14 @@ public class SignalingDao {
     }
 
     /**
-     * Atomically retrieves and deletes the latest SDP offer for a user.
-     * This prevents the same call notification from being sent multiple times.
-     * @param userId The ID of the user receiving the call.
+     * Atomically retrieves and deletes the latest SDP message (offer or answer) for a user.
+     * This prevents the same signaling message from being processed multiple times.
+     * @param userId The ID of the user receiving the message.
      * @return The SdpExchange object if found, otherwise null.
      */
     public SdpExchange consumeSdpForUser(int userId) {
         SdpExchange sdpData = null;
-        String selectSql = "SELECT * FROM sdp_exchange WHERE receiver_id = ? AND type = 'offer' ORDER BY created_at DESC LIMIT 1";
+        String selectSql = "SELECT * FROM sdp_exchange WHERE receiver_id = ? ORDER BY created_at DESC LIMIT 1";
         String deleteSql = "DELETE FROM sdp_exchange WHERE id = ?";
         Connection conn = null;
 
@@ -141,7 +141,7 @@ public class SignalingDao {
             // Start a transaction to ensure the SELECT and DELETE happen together
             conn.setAutoCommit(false);
 
-            // Step 1: Find the latest offer for the user
+            // Step 1: Find the latest message for the user
             try (PreparedStatement selectPs = conn.prepareStatement(selectSql)) {
                 selectPs.setInt(1, userId);
                 try (ResultSet rs = selectPs.executeQuery()) {
@@ -158,7 +158,7 @@ public class SignalingDao {
                 }
             }
 
-            // Step 2: If we found an offer, delete it so it's not sent again
+            // Step 2: If we found a message, delete it so it's not processed again
             if (sdpData != null) {
                 try (PreparedStatement deletePs = conn.prepareStatement(deleteSql)) {
                     deletePs.setInt(1, sdpData.getId());

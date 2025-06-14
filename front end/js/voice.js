@@ -11,6 +11,7 @@ let peerConnection;
 let signalingInterval;
 let pendingCandidates = []; // Queue for candidates that arrive early
 let websocket; // WebSocket for real-time notifications
+let isSignalingInProgress = false; // Lock to prevent signaling race conditions
 
 const STUN_SERVERS = {
     iceServers: [
@@ -53,6 +54,13 @@ async function setupMedia() {
 function createPeerConnection() {
     peerConnection = new RTCPeerConnection(STUN_SERVERS);
 
+    // Monitor the connection state
+    peerConnection.oniceconnectionstatechange = () => {
+        if (peerConnection) {
+            console.log(`ICE Connection State: %c${peerConnection.iceConnectionState}`, 'font-weight: bold; color: blue;');
+        }
+    };
+
     peerConnection.onicecandidate = handleIceCandidate;
     peerConnection.ontrack = handleTrack;
 
@@ -77,18 +85,70 @@ function handleIceCandidate(event) {
 }
 
 function handleTrack(event) {
+    console.log("%cRemote track received. Attaching to audio element.", 'font-weight: bold; color: green;');
     if (!remoteAudio) {
         remoteAudio = document.createElement('audio');
         remoteAudio.autoplay = true;
         document.body.appendChild(remoteAudio);
     }
     remoteAudio.srcObject = event.streams[0];
+
+    // For debugging, ensure the audio element is not accidentally hidden or muted by CSS/attributes
+    remoteAudio.volume = 1.0;
+    remoteAudio.muted = false;
+}
+
+/**
+ * Handles the initial offer passed from the main page via session storage.
+ */
+async function handleIncomingOffer() {
+    const offerString = sessionStorage.getItem('incomingSdpOffer');
+    if (!offerString) {
+        console.warn("Call page loaded without an incoming SDP offer in session storage.");
+        return;
+    }
+
+    console.log("Found incoming SDP offer in session storage. Processing...");
+    const sdpPayload = JSON.parse(offerString);
+    
+    sessionStorage.removeItem('incomingSdpOffer'); // Clean up
+
+    await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sdpPayload.sdp }));
+    
+    console.log("Remote description (offer) set successfully. Creating answer...");
+    const answer = await peerConnection.createAnswer();
+    
+    console.log("Answer created. Setting local description...");
+    await peerConnection.setLocalDescription(answer);
+
+    console.log("Local description (answer) set. Sending answer to server...");
+    await fetch(`${API_BASE_URL}/signaling/send-sdp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            senderId: currentUserId,
+            receiverId: sdpPayload.senderId,
+            sdp: answer.sdp,
+            type: answer.type
+        })
+    });
+    console.log("Answer sent to signaling server.");
 }
 
 async function startSignaling() {
+    // This interval now only needs to handle receiving the ANSWER for the original caller.
     signalingInterval = setInterval(async () => {
+        // If we are already processing a signal, wait until it's done.
+        if (isSignalingInProgress) {
+            return;
+        }
+
         // Check for an incoming offer or answer
         const sdpResponse = await fetch(`${API_BASE_URL}/signaling/get-sdp?userId=${currentUserId}`);
+        
+        if (peerConnection) {
+            console.log(`Polling... Current remote description is:`, peerConnection.currentRemoteDescription);
+        }
         
         if (sdpResponse.status === 404) {
             return; // No new SDP, just continue
@@ -99,54 +159,50 @@ async function startSignaling() {
         }
         
         const sdpData = await sdpResponse.json();
+
+        // Check for a hangup or rejection signal from the other user
+        if (sdpData.status === 'hangup' || sdpData.status === 'rejected') {
+            console.log("Received hangup/reject signal from other user.");
+            alert('The other user has ended the call.');
+            hangupCallLocally(); // Clean up without sending another hangup signal
+            window.location.href = 'main.html';
+            return;
+        }
+        
         if (sdpData && sdpData.sdp && !peerConnection.currentRemoteDescription) {
+            isSignalingInProgress = true; // Acquire lock
             const sdp = { type: sdpData.type, sdp: sdpData.sdp };
-            
+
+            console.log(`Received SDP of type '${sdp.type}'. Processing...`);
+
             peerConnection.setRemoteDescription(new RTCSessionDescription(sdp))
                 .then(() => {
                     console.log('Remote description set successfully.');
 
-                    // Process bundled candidates that came with the SDP
-                    if (sdpData.candidates && sdpData.candidates.length > 0) {
-                        for (const candidate of sdpData.candidates) {
-                            if (candidate.candidate) {
-                                peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate.candidate)))
-                                    .catch(e => console.error("Error adding bundled ICE candidate", e));
-                            }
-                        }
-                    }
-
-                    // If we received an offer, create and send an answer
-                    if (sdp.type === 'offer') {
-                        peerConnection.createAnswer()
-                            .then(answer => peerConnection.setLocalDescription(answer))
-                            .then(() => {
-                                const localDesc = peerConnection.localDescription;
-                                fetch(`${API_BASE_URL}/signaling/send-sdp`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        senderId: currentUserId,
-                                        receiverId: sdpData.senderId,
-                                        sdp: localDesc.sdp,
-                                        type: localDesc.type
-                                    })
-                                });
-                            })
-                            .catch(e => console.error('Error creating answer:', e));
+                    // The receiver now handles the offer from session storage.
+                    // This logic is now only for the CALLER receiving the ANSWER.
+                    if (sdp.type === 'answer') {
+                        console.log("SDP type is 'answer'. Call should be established.");
+                        isSignalingInProgress = false; // Release lock
                     }
                 })
-                .catch(e => console.error('Error setting remote description:', e));
+                .catch(e => {
+                    console.error('CRITICAL: Error setting remote description.', e);
+                    console.error('SDP that caused the error:', sdp);
+                    isSignalingInProgress = false; // Release lock on critical error
+                });
         }
     }, 2000);
 }
 
 async function initiateCall() {
+    console.log("This client is the caller. Creating an offer...");
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
 
     // --- Send the offer ---
     // The 'type' must be a top-level property
+    console.log("Offer created and local description set. Sending offer to server for receiver:", receiverId);
     await fetch(`${API_BASE_URL}/signaling/send-sdp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -170,8 +226,9 @@ function connectWebSocket() {
         const message = JSON.parse(event.data);
         // Listen for a hangup message from the other user
         if (message.type === 'hangup' && message.senderId.toString() === receiverId) {
+            console.log("Received hangup via WebSocket. Cleaning up.");
             alert('The other user has ended the call.');
-            cleanupCall();
+            hangupCallLocally();
             window.location.href = 'main.html';
         }
     };
@@ -181,33 +238,38 @@ function connectWebSocket() {
 }
 
 /**
- * Cleans up all call-related resources and notifies the backend.
+ * Cleans up local call resources (streams, connections) without notifying the server.
  */
-function cleanupCall() {
+function hangupCallLocally() {
     if (websocket) {
         websocket.close();
     }
-    // Notify the backend that the call has ended
-    fetch(`${API_BASE_URL}/signaling/hangup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            user1: currentUserId, 
-            user2: receiverId 
-        })
-    }).catch(e => console.error("Failed to send hangup signal:", e));
-
     clearInterval(signalingInterval);
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
     }
     if (peerConnection) {
         peerConnection.close();
+        peerConnection = null;
     }
-    if (remoteAudio) {
-        remoteAudio.remove();
-    }
-    pendingCandidates = []; // Clear any pending candidates
+    pendingCandidates = [];
+}
+
+/**
+ * Notifies the backend that the call has ended and cleans up local resources.
+ */
+function hangupCall() {
+    // Notify the backend that the call has ended
+    fetch(`${API_BASE_URL}/signaling/hangup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            user1: currentUserId,
+            user2: receiverId
+        })
+    }).catch(e => console.error("Failed to send hangup signal:", e));
+
+    hangupCallLocally();
 }
 
 function handleEndVoice() {
@@ -216,12 +278,12 @@ function handleEndVoice() {
 }
 
 function confirmEndVoice() {
-    cleanupCall();
+    hangupCall();
     window.location.href = 'main.html';
 }
 
 async function handleLogout() {
-    cleanupCall(); // End the call without confirmation
+    hangupCall(); // End the call without confirmation
     try {
         await fetch(`${API_BASE_URL}/auth/logout`, {
             method: 'POST',
@@ -257,8 +319,13 @@ async function initialize() {
         startSignaling();
         connectWebSocket(); // Connect to WebSocket for notifications
         
-        if (parseInt(currentUserId) < parseInt(receiverId)) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const isCaller = urlParams.get('isCaller') === 'true';
+
+        if (isCaller) {
             initiateCall();
+        } else {
+            handleIncomingOffer();
         }
 
         muteBtn.addEventListener('click', toggleMute);

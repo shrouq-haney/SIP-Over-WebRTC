@@ -4,16 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title> SASH Talk</title>
-    <link rel="icon" type="image/png" href="../images/outgoing-call.png">
+    <link rel="icon" type="image/png" href="/images/outgoing-call.png">
 
-    <link rel="stylesheet" href="../CSS/main.css" />
+    <link rel="stylesheet" href="/CSS/main.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
 </head>
 <body>
 
 <header>
     <div class="logo">
-        <img src="../images/logo.png" alt="Logo" id="logo">
+        <img src="/images/logo.png" alt="Logo" id="logo">
     </div>
     <button class="logout-btn" id="logoutBtn">
         <i class="fas fa-sign-out-alt"></i> Logout
@@ -29,7 +30,7 @@
     <div class="details" id="details">
         <!-- Initial Welcome Message -->
         <div class="welcome-container">
-            <img src="../images/hello.gif" alt="Welcome" class="welcome-gif"/>
+            <img src="/images/hello.gif" alt="Welcome" class="welcome-gif"/>
             <h2>Welcome to SASH Talk!</h2>
             <p>Select a user from the list to start a call or chat.</p>
         </div>
@@ -90,10 +91,12 @@
             </button>
         </div>
     </div>
-            </div>
+</div>
 
+<audio id="ringtone" src="../assets/ringtone.mp3" loop></audio>
 <script type="module" src="../js/api.js"></script>
 <script type="module" src="../js/main.js"></script>
+<script type="module" src="../js/logout.js"></script>
 
 </body>
 </html>

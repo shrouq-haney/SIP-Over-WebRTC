@@ -1,20 +1,24 @@
 package com.webrtc.backend.servlet;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.webrtc.backend.websocket.ChatWebSocket;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.webrtc.backend.dao.SignalingDao;
+import com.webrtc.backend.model.CallStatus;
+import com.webrtc.backend.websocket.ChatWebSocket;
 
 @WebServlet("/api/signaling/hangup")
 public class HangupServlet extends HttpServlet {
+    private final SignalingDao signalingDao = new SignalingDao();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -28,7 +32,7 @@ public class HangupServlet extends HttpServlet {
 
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        resp.setHeader("Access-control-Allow-Origin", "*");
+        resp.setHeader("Access-Control-Allow-Origin", "*");
 
         try {
             Map<String, String> payload = objectMapper.readValue(req.getReader(), new TypeReference<Map<String, String>>() {});
@@ -44,6 +48,10 @@ public class HangupServlet extends HttpServlet {
             int hangupUserId = Integer.parseInt(fromIdStr);
             int otherUserId = Integer.parseInt(toIdStr);
 
+            // Mark the call as rejected/ended in both directions
+            signalingDao.updateSdpStatus(hangupUserId, otherUserId, CallStatus.REJECTED);
+            signalingDao.updateSdpStatus(otherUserId, hangupUserId, CallStatus.REJECTED);
+
             // Create a special "hangup" message to forward
             Map<String, Object> hangupMessage = new HashMap<>();
             hangupMessage.put("type", "hangup");
@@ -53,7 +61,6 @@ public class HangupServlet extends HttpServlet {
             ChatWebSocket.notifyUser(otherUserId, objectMapper.writeValueAsString(hangupMessage));
 
             resp.setStatus(HttpServletResponse.SC_OK);
-
         } catch (NumberFormatException e) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             resp.getWriter().write("{\"error\": \"Invalid 'from' or 'to' parameter. They must be numbers.\"}");
