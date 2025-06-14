@@ -36,6 +36,29 @@ function protectPage() {
 }
 
 /**
+ * Marks all messages in the current chat as read.
+ */
+async function markMessagesAsRead() {
+    // Reset notification status for this user so popups can appear for new messages in the future.
+    const notifiedSenders = new Set(JSON.parse(sessionStorage.getItem('notifiedSenders') || '[]'));
+    notifiedSenders.delete(parseInt(receiverId)); // receiverId is a string, so parse it to a number.
+    sessionStorage.setItem('notifiedSenders', JSON.stringify(Array.from(notifiedSenders)));
+
+    try {
+        await fetch(`${API_BASE_URL}/chat/mark-as-read`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                userId: currentUserId, 
+                senderId: receiverId 
+            })
+        });
+    } catch (error) {
+        console.error('Failed to mark messages as read:', error);
+    }
+}
+
+/**
  * Connects to the WebSocket server.
  */
 function connectWebSocket() {
@@ -87,8 +110,8 @@ function displayMessage(msg) {
     const isSent = msg.senderId.toString() === currentUserId;
     messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
     
-    // Format the timestamp to include date and time
-    const time = new Date(msg.timestamp).toLocaleString([], { 
+    // Use `createdAt` and format the timestamp to include date and time
+    const time = new Date(msg.createdAt).toLocaleString([], { 
         year: 'numeric', month: 'short', day: 'numeric', 
         hour: '2-digit', minute: '2-digit' 
     });
@@ -121,7 +144,7 @@ function sendMessage() {
             senderId: currentUserId,
             receiverId: receiverId,
             content: content,
-            timestamp: new Date().toISOString()
+            createdAt: new Date().toISOString()
         }
         displayMessage(optimisticMessage);
         
@@ -176,6 +199,7 @@ async function confirmLogout() {
 function initialize() {
     if (protectPage()) {
         userNameSpan.textContent = receiverName || 'User';
+        markMessagesAsRead(); // Mark messages as read on page load
         connectWebSocket();
 
         const sendButton = document.querySelector('.send-btn');

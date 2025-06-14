@@ -4,8 +4,8 @@ import { API_BASE_URL } from './api.js';
 let heartbeatInterval;
 let callCheckInterval;
 let messageCheckInterval;
+let unreadCountInterval; // Interval for checking unread counts
 let onlineUsers = []; // Cache for online users
-let snoozedSenders = new Set(); // To prevent repeated message popups
 const currentUserId = sessionStorage.getItem('userId');
 
 // --- DOM Elements ---
@@ -43,6 +43,53 @@ function protectPage() {
 }
 
 /**
+ * Fetches unread message counts and updates the UI.
+ */
+async function updateUnreadCounts() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/chat/unread-count?userId=${currentUserId}`);
+        if (!response.ok) {
+            console.error(`Failed to fetch unread counts. Status: ${response.status}`);
+            return;
+        }
+
+        const rawCounts = await response.json();
+        console.log('Unread counts from API:', rawCounts);
+
+        // Check if rawCounts is a valid object with keys
+        if (!rawCounts || typeof rawCounts !== 'object' || Object.keys(rawCounts).length === 0) {
+            return; // Exit if there's no data, it's not an object, or it's an empty object
+        }
+        
+        // The API returns an object like { "senderId": count, ... }.
+        // We can convert this directly into a Map.
+        const countsMap = new Map(Object.entries(rawCounts));
+
+        countsMap.forEach((count, senderId) => {
+            if (count > 0) {
+                // Ensure senderId is a string for the querySelector
+                const userElement = sidebar.querySelector(`.user[data-user-id='${senderId}']`);
+                if (userElement) {
+                    // Prevent adding duplicate badges
+                    let badge = userElement.querySelector('.unread-badge');
+                    if (!badge) {
+                        badge = document.createElement('span');
+                        badge.className = 'unread-badge';
+                        userElement.appendChild(badge);
+                    }
+                    badge.textContent = count;
+                } else {
+                    // This log helps if the user list doesn't contain the sender
+                    console.warn(`updateUnreadCounts: Did not find user element for senderId ${senderId}`);
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error updating unread counts:', error);
+    }
+}
+
+/**
  * Fetches the list of online users and renders them in the sidebar.
  */
 async function fetchAndDisplayOnlineUsers() {
@@ -53,19 +100,31 @@ async function fetchAndDisplayOnlineUsers() {
         const users = await response.json();
         onlineUsers = users; // Update cache
 
-        sidebar.innerHTML = '<h2>Online Users</h2>'; // Clear existing users
+        sidebar.innerHTML = '<h2>Online Users</h2>'; // Clear container
 
         users.forEach(user => {
-            if (user.userId.toString() === currentUserId) return; // Don't show self
+            if (user.userId.toString() === currentUserId) return;
 
             const userElement = document.createElement('div');
             userElement.className = 'user';
             userElement.dataset.userId = user.userId;
-            userElement.dataset.username = user.username;
-            userElement.innerHTML = `<span class="status">🟢</span> ${user.username}`;
+            userElement.dataset.username = user.username; // Store username for easy access
+
+            // Create a container for the name and status to align them properly
+            const userInfo = document.createElement('div');
+            userInfo.className = 'user-info';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.innerHTML = `<span class="status">🟢</span> ${user.username}`;
+            userInfo.appendChild(nameSpan);
+
+            userElement.appendChild(userInfo);
             userElement.onclick = () => selectUser(user);
             sidebar.appendChild(userElement);
         });
+
+        // After rendering the user list, update the unread counts
+        await updateUnreadCounts();
 
     } catch (error) {
         console.error(error);
@@ -115,17 +174,35 @@ async function checkForIncomingCalls() {
  * Periodically checks for new, unread messages.
  */
 async function checkForNewMessages() {
-    // Don't check if any modal is already open
     if (callModal.style.display === 'flex' || messageModal.style.display === 'flex') return;
 
     try {
         const response = await fetch(`${API_BASE_URL}/chat/unread?userId=${currentUserId}`);
         if (response.ok) {
-            const unreadMessages = await response.json();
+            const rawData = await response.json();
+            
+            // Exit if there's no data.
+            if (!rawData || (typeof rawData === 'object' && Object.keys(rawData).length === 0)) {
+                return;
+            }
+
+            // Standardize the API response to always be an array.
+            const unreadMessages = Array.isArray(rawData) ? rawData : [rawData];
+
             if (unreadMessages.length > 0) {
-                const newMessage = unreadMessages.find(msg => !snoozedSenders.has(msg.senderId));
+                // Get the list of users we have already shown a popup for from session storage.
+                const notifiedSenders = new Set(JSON.parse(sessionStorage.getItem('notifiedSenders') || '[]'));
+                
+                // Find the first message from a user we haven't notified yet.
+                // Ensure we compare numbers with numbers for consistency.
+                const newMessage = unreadMessages.find(msg => msg && !notifiedSenders.has(Number(msg.senderId)));
                 
                 if (newMessage) {
+                    // Mark this sender as notified for this session BEFORE showing the popup.
+                    // Also ensure we add a number to the set.
+                    notifiedSenders.add(Number(newMessage.senderId));
+                    sessionStorage.setItem('notifiedSenders', JSON.stringify(Array.from(notifiedSenders)));
+                    
                     // --- Get sender's name ---
                     // First, try to find the user in the cached online list
                     let sender = onlineUsers.find(u => u.userId === newMessage.senderId);
@@ -176,14 +253,13 @@ function showNewMessagePopup(senderId, name) {
     messageModal.style.display = 'flex';
 
     viewChatBtn.onclick = () => {
-        // When user clicks to view, un-snooze the sender
-        snoozedSenders.delete(senderId);
+        // Simply go to the chat. The notification state is reset when the chat page loads.
         goTo('chat.html', senderId, name);
+        hideNewMessagePopup();
     };
 
     closeMessageBtn.onclick = () => {
-        // Snooze notifications from this sender to prevent repeated popups
-        snoozedSenders.add(senderId);
+        // Simply hide the popup. The user is already marked as notified.
         hideNewMessagePopup();
     };
 }
@@ -316,9 +392,13 @@ async function confirmLogout() {
 
 function initialize() {
     if (protectPage()) {
-        fetchAndDisplayOnlineUsers();
-        setInterval(fetchAndDisplayOnlineUsers, 10000);
+        // Run once immediately, then set intervals
+        fetchAndDisplayOnlineUsers(); 
+        sendHeartbeat();
+        checkForIncomingCalls();
+        checkForNewMessages();
 
+        setInterval(fetchAndDisplayOnlineUsers, 10000); // Refreshes users and then updates counts
         heartbeatInterval = setInterval(sendHeartbeat, 30000);
         callCheckInterval = setInterval(checkForIncomingCalls, 3000);
         messageCheckInterval = setInterval(checkForNewMessages, 5000);

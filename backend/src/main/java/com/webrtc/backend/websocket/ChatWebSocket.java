@@ -73,6 +73,21 @@ public class ChatWebSocket {
     }
 
     /**
+     * Utility method to send a raw JSON string to a specific user.
+     * Can be used for notifications like 'hangup'.
+     */
+    public static void notifyUser(int userId, String jsonMessage) {
+        try {
+            Session session = activeSessions.get(userId);
+            if (session != null && session.isOpen()) {
+                session.getBasicRemote().sendText(jsonMessage);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
      * Utility method to send a message to a specific user
      */
     public static void sendMessage(int userId, ChatMessage message) {

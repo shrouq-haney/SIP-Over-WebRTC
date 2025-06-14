@@ -6,7 +6,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.webrtc.backend.model.ChatMessage;
 import com.webrtc.backend.util.DatabaseUtil;
@@ -99,5 +101,24 @@ public class ChatDao {
         message.setRead(rs.getBoolean("read"));
         message.setCreatedAt(rs.getTimestamp("created_at"));
         return message;
+    }
+
+    public Map<Integer, Integer> getUnreadMessageCounts(int receiverId) throws SQLException {
+        String sql = "SELECT sender_id, COUNT(*) as unread_count FROM chat_messages WHERE receiver_id = ? AND `read` = FALSE GROUP BY sender_id";
+        Map<Integer, Integer> unreadCounts = new HashMap<>();
+
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, receiverId);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    int senderId = rs.getInt("sender_id");
+                    int count = rs.getInt("unread_count");
+                    unreadCounts.put(senderId, count);
+                }
+            }
+        }
+        return unreadCounts;
     }
 } 

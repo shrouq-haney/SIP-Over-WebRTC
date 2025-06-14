@@ -10,6 +10,7 @@ let remoteStream;
 let peerConnection;
 let signalingInterval;
 let pendingCandidates = []; // Queue for candidates that arrive early
+let websocket; // WebSocket for real-time notifications
 
 const STUN_SERVERS = {
     iceServers: [
@@ -160,9 +161,43 @@ async function initiateCall() {
 }
 
 /**
- * Cleans up all call-related resources.
+ * Connects to the WebSocket server for real-time events like hangup.
+ */
+function connectWebSocket() {
+    const wsUrl = `ws://localhost:8080/WebRTC_BackEnd/ws/chat/${currentUserId}`;
+    websocket = new WebSocket(wsUrl);
+
+    websocket.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        // Listen for a hangup message from the other user
+        if (message.type === 'hangup' && message.senderId.toString() === receiverId) {
+            alert('The other user has ended the call.');
+            cleanupCall();
+            window.location.href = 'main.html';
+        }
+    };
+
+    websocket.onclose = () => console.log('Notification WebSocket closed.');
+    websocket.onerror = (error) => console.error('Notification WebSocket error:', error);
+}
+
+/**
+ * Cleans up all call-related resources and notifies the backend.
  */
 function cleanupCall() {
+    if (websocket) {
+        websocket.close();
+    }
+    // Notify the backend that the call has ended
+    fetch(`${API_BASE_URL}/signaling/hangup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            user1: currentUserId, 
+            user2: receiverId 
+        })
+    }).catch(e => console.error("Failed to send hangup signal:", e));
+
     clearInterval(signalingInterval);
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
@@ -223,6 +258,7 @@ async function initialize() {
         await setupMedia();
         createPeerConnection();
         startSignaling();
+        connectWebSocket(); // Connect to WebSocket for notifications
         
         // A simple way to decide who makes the offer: the one with the lower ID.
         // This is a naive approach but avoids both users making an offer simultaneously.

@@ -36,18 +36,31 @@ header {
     background-color: white;
     border-right: 1px solid var(--accent-color);
     padding: 20px;
+    overflow-y: auto;
 }
 
 .user {
-    padding: 10px;
-    margin: 5px 0;
+    padding: 10px 15px;
     cursor: pointer;
-    border-radius: 5px;
-    transition: background-color 0.3s;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-grow: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .user:hover {
-    background-color: var(--background-color);
+    background-color: #f0f0f0;
 }
 
 .status {
@@ -259,5 +272,24 @@ h2 {
 }
 
 .welcome-container p {
-    font-size: 1.1rem;
+    font-size: 1.1em;
+    margin-top: 10px;
+}
+
+/* Unread message badge */
+.unread-badge {
+    background-color: #dc3545;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 3px 8px;
+    border-radius: 12px;
+    min-width: 20px;
+    text-align: center;
+    line-height: 14px;
+}
+
+/* Styles for when a user IS selected */
+.details.user-selected {
+    justify-content: flex-start;
 }
