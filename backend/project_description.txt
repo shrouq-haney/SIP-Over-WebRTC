@@ -1,0 +1,262 @@
+Here's a detailed explanation of your backend code, how to integrate it with a frontend, and a diagram illustrating the call flow.
+
+### Code Description
+
+This is a Java-based backend for a WebRTC application. It acts as a signaling server to facilitate the establishment of a peer-to-peer connection between two clients. It uses a database (likely MySQL, based on the `pom.xml` dependencies) to store signaling messages like SDP (Session Description Protocol) and ICE (Interactive Connectivity Establishment) candidates.
+
+The main components of the application are:
+
+*   **Servlets**: These are the API endpoints that the frontend will interact with. They handle HTTP requests for signaling.
+    *   `/api/signaling/send-sdp`: To send an SDP offer or answer from one client to another, via the server.
+    *   `/api/signaling/get-sdp`: To get the latest SDP for a user. The other client will poll this endpoint.
+    *   `/api/signaling/send-candidate`: To send an ICE candidate.
+    *   `/api/signaling/get-candidates`: To get all ICE candidates for a user.
+    *   `/api/signaling/call-status`: To check the status of a call (e.g., ringing, answered).
+    *   `/api/signaling/reject-call`: To reject an incoming call.
+*   **DAO (Data Access Object)**: The `SignalingDao` class encapsulates all the database logic. It has methods for saving and retrieving SDP and ICE candidate data from the database.
+*   **Models**: `SdpExchange` and `IceCandidate` are plain Java objects that represent the data being exchanged and stored. `SdpExchange` holds the SDP payload, sender/receiver info, and call status. `IceCandidate` holds the ICE candidate string.
+*   **Database**: The application uses a database with at least two tables: `sdp_exchange` and `ice_candidates` to temporarily store the signaling messages until they are retrieved by the other client.
+
+### How to Integrate with a Frontend
+
+A frontend (e.g., a JavaScript application running in a browser) would use the browser's built-in WebRTC API to create a peer-to-peer connection. Your backend serves as the crucial "signaling server" to help two browsers find and connect to each other.
+
+Here is a typical integration flow:
+
+1.  **Initiating a Call**:
+    *   When a user (let's call them **User A**) wants to call another user (**User B**), User A's frontend creates an `RTCPeerConnection` object.
+    *   User A's frontend then calls `createOffer()` on this object to generate an SDP offer. This offer contains information about User A's media capabilities.
+    *   The frontend sends this SDP offer to your backend by making a `POST` request to the `/api/signaling/send-sdp` endpoint. The request body will contain the SDP, the `senderId` (User A's ID), and `receiverId` (User B's ID).
+
+2.  **Receiving a Call**:
+    *   User B's frontend needs to know that a call is incoming. A common way to do this is by "polling" - periodically making `GET` requests to an endpoint like `/api/signaling/get-sdp`.
+    *   When User B's frontend receives the SDP offer from User A, it creates its own `RTCPeerConnection` and uses the received offer to set its remote description (`setRemoteDescription()`).
+    *   User B's browser then generates an SDP answer by calling `createAnswer()`.
+    *   This SDP answer is sent back to the server using the same `/api/signaling/send-sdp` endpoint, but this time User B is the sender.
+
+3.  **Completing the Connection**:
+    *   User A's frontend, which is also polling `/api/signaling/get-sdp`, will receive User B's SDP answer and use it to set its remote description.
+    *   **ICE Candidate Exchange**: In parallel to the SDP exchange, both clients are gathering ICE candidates. These candidates describe how to connect to the peer. As they are discovered, each client sends them to the server using the `/api/signalin/send-candidate` endpoint.
+    *   Both clients also poll `/api/signaling/get-candidates` to get the other peer's ICE candidates and add them to their `RTCPeerConnection` using `addIceCandidate()`.
+
+4.  **Connection Established**:
+    *   Once the SDP offer/answer exchange is complete and enough ICE candidates have been exchanged, a direct peer-to-peer connection is established between User A and User B.
+    *   The media (audio/video) will now flow directly between the clients, and your server is no longer involved in the media stream.
+
+### Call Flow
+
+Here is the Mermaid syntax for a diagram that visualizes the signaling flow for establishing a WebRTC call:
+
+```mermaid
+sequenceDiagram
+    participant UserA_FE as User A (Frontend)
+    participant Backend
+    participant UserB_FE as User B (Frontend)
+
+    UserA_FE->>UserA_FE: createPeerConnection()
+    UserA_FE->>UserA_FE: createOffer()
+    UserA_FE->>Backend: POST /api/signaling/send-sdp (offer)
+    Backend-->>UserA_FE: 200 OK
+
+    UserB_FE->>Backend: GET /api/signaling/get-sdp
+    Backend-->>UserB_FE: SDP Offer from User A
+    UserB_FE->>UserB_FE: createPeerConnection()
+    UserB_FE->>UserB_FE: setRemoteDescription(offer)
+    UserB_FE->>UserB_FE: createAnswer()
+    UserB_FE->>Backend: POST /api/signaling/send-sdp (answer)
+    Backend-->>UserB_FE: 200 OK
+
+    UserA_FE->>Backend: GET /api/signaling/get-sdp
+    Backend-->>UserA_FE: SDP Answer from User B
+    UserA_FE->>UserA_FE: setRemoteDescription(answer)
+
+    Note over UserA_FE, UserB_FE: ICE Candidate Exchange (in parallel)
+    UserA_FE->>Backend: POST /api/signaling/send-candidate
+    UserB_FE->>Backend: POST /api/signaling/send-candidate
+    UserA_FE->>Backend: GET /api/signaling/get-candidates
+    UserB_FE->>Backend: GET /api/signaling/get-candidates
+
+    UserA_FE-->>UserB_FE: Direct Peer-to-Peer Connection Established
+``` 
+
+### Authentication and User Status APIs
+
+In addition to the WebRTC signaling, the backend now provides a set of APIs for user authentication and managing user online status.
+
+#### **Core Concepts**
+
+*   **Online Status**: Users are considered "online" or "offline". This status is stored in the `users` table.
+*   **Heartbeat**: A frontend client must periodically send a "heartbeat" signal to the backend to indicate that the user is still active. This updates the `last_update` timestamp for the user in the database.
+*   **Automatic Offline Task**: A background process runs every minute on the server. It automatically sets any user to "offline" if their `last_update` timestamp is more than 2 minutes old. This cleans up stale sessions for users who may have closed their browser or lost connection without explicitly logging out.
+
+#### **API Endpoints**
+
+1.  **Register a New User**
+    *   **Endpoint**: `POST /api/auth/register`
+    *   **Description**: Creates a new user in the system.
+    *   **Request Body**: A JSON object with the user's details.
+        ```json
+        {
+            "username": "newuser",
+            "password": "password123",
+            "msisdn": "1234567890"
+        }
+        ```
+    *   **Response**: `201 Created` on success.
+
+2.  **Log In a User**
+    *   **Endpoint**: `POST /api/auth/login`
+    *   **Description**: Authenticates a user and returns their user ID. Upon successful login, the user's `online` status is automatically set to `TRUE`.
+    *   **Request Body**:
+        ```json
+        {
+            "username": "newuser",
+            "password": "password123"
+        }
+        ```
+    *   **Response**: `200 OK` with a JSON body containing the user's ID.
+        ```json
+        {
+            "userId": 1
+        }
+        ```
+
+3.  **Get Online Users**
+    *   **Endpoint**: `GET /api/users/online`
+    *   **Description**: Retrieves a list of all users who are currently marked as online.
+    *   **Response**: `200 OK` with a JSON array of user objects.
+        ```json
+        [
+            {
+                "userId": 1,
+                "username": "alice"
+            },
+            {
+                "userId": 2,
+                "username": "bob"
+            }
+        ]
+        ```
+
+4.  **Send a User Heartbeat**
+    *   **Endpoint**: `POST /api/users/heartbeat`
+    *   **Description**: Signals to the backend that a user is still active. This should be called periodically by the frontend (e.g., every 30 seconds) for a logged-in user. It updates the user's `last_update` timestamp and ensures their `online` status is `TRUE`.
+    *   **Request Body**:
+        ```json
+        {
+            "userId": 1
+        }
+        ```
+    *   **Response**: `200 OK` on success.
+
+5.  **Log Out a User**
+    *   **Endpoint**: `POST /api/auth/logout`
+    *   **Description**: Explicitly sets a user's status to offline. This should be called when a user clicks a "logout" button.
+    *   **Request Body**:
+        ```json
+        {
+            "userId": 1
+        }
+        ```
+    *   **Response**: `200 OK` on success.
+
+---
+
+### Chat Messaging APIs
+
+The backend also provides a real-time chat messaging system with both REST endpoints and WebSocket support.
+
+#### **Core Concepts**
+
+*   **Message Model**: The `ChatMessage` class represents a message between two users, with fields for sender, receiver, content, read status, and timestamp.
+*   **Message Storage**: All messages are stored in the `chat_messages` table in the database, allowing for message history and offline message delivery.
+*   **Real-time Communication**: WebSockets are used for real-time message delivery when both users are online.
+*   **REST Endpoints**: Traditional HTTP endpoints are provided for retrieving message history and unread messages.
+
+#### **API Endpoints**
+
+1.  **Get Chat Messages**
+    *   **Endpoint**: `GET /api/chat/messages`
+    *   **Description**: Retrieves the chat history between two users.
+    *   **Query Parameters**: `userId1` and `userId2` (the IDs of the two users)
+    *   **Response**: `200 OK` with a JSON array of message objects.
+    *   **Note**: This endpoint automatically marks messages as read when they are retrieved.
+
+2.  **Get Unread Messages**
+    *   **Endpoint**: `GET /api/chat/unread`
+    *   **Description**: Retrieves all unread messages for a specific user.
+    *   **Query Parameter**: `userId` (the ID of the user)
+    *   **Response**: `200 OK` with a JSON array of unread message objects.
+
+#### **WebSocket Endpoint**
+
+*   **Endpoint**: `/ws/chat/{userId}`
+*   **Description**: WebSocket connection for real-time messaging. The `{userId}` in the path is the ID of the user establishing the connection.
+*   **Message Format**: Messages sent and received through this WebSocket should be JSON objects with the following structure:
+    ```json
+    {
+        "receiverId": 2,
+        "content": "Hello, how are you?"
+    }
+    ```
+*   **Features**:
+    *   Maintains a list of active user sessions
+    *   Delivers messages instantly to online users
+    *   Stores messages in the database for offline users
+    *   Provides real-time message status updates (read receipts)
+
+#### **API Usage Examples**
+
+Here are examples of how to interact with the chat API from any client:
+
+**WebSocket Connection**:
+```
+ws://your-server/WebRTC_BackEnd/ws/chat/{userId}
+```
+
+**Send a Message via WebSocket**:
+```json
+{
+    "receiverId": 2,
+    "content": "Hello, how are you?"
+}
+```
+
+**Get Chat History**:
+```
+GET /api/chat/messages?userId1=1&userId2=2
+```
+
+**Get Unread Messages**:
+```
+GET /api/chat/unread?userId=1
+```
+
+The chat API provides a complete solution for:
+- Real-time messaging using WebSockets
+- Message persistence in database
+- Message history retrieval
+- Unread message tracking
+- Message status management (read/unread)
+
+---
+
+## ✅ Chat API Completeness Checklist
+
+### Included
+- REST endpoint to get chat history between two users (`GET /api/chat/messages`)
+- REST endpoint to get unread messages for a user (`GET /api/chat/unread`)
+- WebSocket endpoint for real-time chat (`/ws/chat/{userId}`)
+- Real-time delivery, offline storage, read status, and delivery confirmation
+- Test data and usage examples
+- All SQL and Java code properly escape the `read` keyword
+- Test scenarios and expected responses
+
+### Not Included (by design or not required)
+- No REST endpoint for sending messages (WebSocket only)
+- No endpoint for deleting or editing messages
+- No pagination for chat history
+- No authentication/authorization on chat endpoints (assumed handled elsewhere)
+
+**Conclusion:**
+All required Chat API endpoints and features are present and documented. If you need any of the "not included" features, they can be added as needed. 

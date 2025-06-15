@@ -1,0 +1,171 @@
+{
+	"info": {
+		"_postman_id": "e5a23d4f-8c2b-4d3c-a9e2-9f2e3c4d5b6a",
+		"name": "WebRTC Chat API",
+		"description": "Collection for testing WebRTC Chat API endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Chat",
+			"item": [
+				{
+					"name": "Get Chat History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/chat/messages?userId1=1&userId2=2",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"chat",
+								"messages"
+							],
+							"query": [
+								{
+									"key": "userId1",
+									"value": "1",
+									"description": "First user ID (Alice)"
+								},
+								{
+									"key": "userId2",
+									"value": "2",
+									"description": "Second user ID (Bob)"
+								}
+							]
+						},
+						"description": "Get chat history between two users (Alice and Bob)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Unread Messages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/chat/unread?userId=3",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"chat",
+								"unread"
+							],
+							"query": [
+								{
+									"key": "userId",
+									"value": "3",
+									"description": "User ID (Charlie)"
+								}
+							]
+						},
+						"description": "Get unread messages for a user (Charlie)"
+					},
+					"response": []
+				}
+			],
+			"description": "Chat-related endpoints"
+		},
+		{
+			"name": "WebSocket Chat",
+			"item": [
+				{
+					"name": "WebSocket Connection (Alice)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "ws://{{baseUrl}}/ws/chat/1",
+							"protocol": "ws",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ws",
+								"chat",
+								"1"
+							]
+						},
+						"description": "WebSocket connection for Alice (ID: 1)"
+					},
+					"response": []
+				},
+				{
+					"name": "WebSocket Connection (Bob)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "ws://{{baseUrl}}/ws/chat/2",
+							"protocol": "ws",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ws",
+								"chat",
+								"2"
+							]
+						},
+						"description": "WebSocket connection for Bob (ID: 2)"
+					},
+					"response": []
+				}
+			],
+			"description": "WebSocket endpoints for real-time chat",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							""
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							""
+						]
+					}
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "localhost:8080/WebRTC_BackEnd",
+			"type": "string",
+			"description": "Base URL for the API"
+		}
+	]
+} 
