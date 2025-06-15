@@ -12,6 +12,7 @@ let signalingInterval;
 let pendingCandidates = []; // Queue for candidates that arrive early
 let websocket; // WebSocket for real-time notifications
 let isSignalingInProgress = false; // Lock to prevent signaling race conditions
+let callTimer;
 
 const STUN_SERVERS = {
     iceServers: [
@@ -227,20 +228,21 @@ function connectWebSocket() {
             resolve();
         };
 
-        websocket.onmessage = (event) => {
+        websocket.onmessage = async (event) => {
             const message = JSON.parse(event.data);
             const payload = message.payload;
             
             if (payload) {
                 switch (payload.type) {
                     case 'offer':
-                        handleRemoteOffer(payload);
+                        // Handle offer immediately
+                        await handleRemoteOffer(payload);
                         break;
                     case 'answer':
-                        handleRemoteAnswer(payload);
+                        await handleRemoteAnswer(payload);
                         break;
                     case 'candidate':
-                        handleRemoteCandidate(payload);
+                        await handleRemoteCandidate(payload);
                         break;
                     case 'hangup':
                         if (payload.senderId.toString() === receiverId) {
@@ -276,13 +278,11 @@ async function handleRemoteOffer(payload) {
             }));
             console.log('Remote description set successfully');
             
-            // Process any pending candidates after setting remote description
             processPendingIceCandidates();
             
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
             
-            // Send answer through WebSocket
             const message = {
                 payload: {
                     type: 'answer',
@@ -293,6 +293,10 @@ async function handleRemoteOffer(payload) {
             };
             websocket.send(JSON.stringify(message));
             console.log('Answer sent through WebSocket');
+            
+            if (!callTimer) {
+                startCallTimer();
+            }
         } catch (e) {
             console.error('Error handling remote offer:', e);
         }
@@ -309,8 +313,11 @@ async function handleRemoteAnswer(payload) {
             }));
             console.log('Remote description set successfully');
             
-            // Process any pending candidates after setting remote description
             processPendingIceCandidates();
+            
+            if (!callTimer) {
+                startCallTimer();
+            }
         } catch (e) {
             console.error('Error handling remote answer:', e);
         }
@@ -446,15 +453,19 @@ async function initialize() {
         try {
             await setupMedia();
             createPeerConnection();
-            await connectWebSocket(); // Wait for WebSocket connection
+            await connectWebSocket();
             
             const urlParams = new URLSearchParams(window.location.search);
             const isCaller = urlParams.get('isCaller') === 'true';
+            const incomingOffer = sessionStorage.getItem('incomingSdpOffer');
 
             if (isCaller) {
                 await initiateCall();
-            } else {
-                handleIncomingOffer();
+            } else if (incomingOffer) {
+                // If we have an incoming offer, handle it immediately
+                const offerData = JSON.parse(incomingOffer);
+                await handleRemoteOffer(offerData);
+                sessionStorage.removeItem('incomingSdpOffer');
             }
 
             // Add event listeners

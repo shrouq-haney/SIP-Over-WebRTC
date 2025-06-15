@@ -12,6 +12,8 @@ let signalingInterval;
 let pendingCandidates = []; // Queue for candidates that arrive early
 let websocket; // WebSocket for real-time notifications
 let isSignalingInProgress = false; // Lock to prevent signaling race conditions
+let callTimer; // Add timer variable
+let callStartTime; // Add call start time variable
 
 const STUN_SERVERS = {
     iceServers: [
@@ -30,6 +32,8 @@ const endCallModal = document.getElementById('endCallModal');
 const confirmEndCallBtn = document.getElementById('confirmEndCallBtn');
 const cancelEndCallBtn = document.getElementById('cancelEndCallBtn');
 
+// Get the existing timer element
+const callTimerDisplay = document.querySelector('.call-timer');
 
 // --- Functions ---
 
@@ -54,17 +58,24 @@ async function setupMedia() {
 function createPeerConnection() {
     peerConnection = new RTCPeerConnection(STUN_SERVERS);
 
-    // Monitor the connection state
     peerConnection.oniceconnectionstatechange = () => {
-        if (peerConnection) {
-            console.log(`ICE Connection State: %c${peerConnection.iceConnectionState}`, 'font-weight: bold; color: blue;');
+        console.log('ICE Connection State:', peerConnection.iceConnectionState);
+        if (peerConnection.iceConnectionState === 'connected') {
+            console.log('Connection established!');
+            // Start timer when connection is established
+            if (!callTimer) {
+                startCallTimer();
+            }
+        } else if (peerConnection.iceConnectionState === 'disconnected' || 
+                  peerConnection.iceConnectionState === 'failed') {
+            console.log('Connection lost!');
+            stopCallTimer();
         }
     };
 
     peerConnection.onicecandidate = handleIceCandidate;
     peerConnection.ontrack = handleTrack;
 
-    // Add local tracks to the connection
     localStream.getTracks().forEach(track => {
         peerConnection.addTrack(track, localStream);
     });
@@ -116,17 +127,17 @@ function processPendingIceCandidates() {
 }
 
 function handleTrack(event) {
-    console.log("%cRemote track received. Attaching to audio element.", 'font-weight: bold; color: green;');
-    if (!remoteAudio) {
-        remoteAudio = document.createElement('audio');
-        remoteAudio.autoplay = true;
-        document.body.appendChild(remoteAudio);
+    console.log('Remote track received');
+    remoteAudio = event.streams[0];
+    const audioElement = document.createElement('audio');
+    audioElement.srcObject = remoteAudio;
+    audioElement.autoplay = true;
+    document.body.appendChild(audioElement);
+    
+    // Start timer when we receive the track
+    if (!callTimer) {
+        startCallTimer();
     }
-    remoteAudio.srcObject = event.streams[0];
-
-    // For debugging, ensure the audio element is not accidentally hidden or muted by CSS/attributes
-    remoteAudio.volume = 1.0;
-    remoteAudio.muted = false;
 }
 
 /**
@@ -176,20 +187,21 @@ function connectWebSocket() {
             resolve();
         };
 
-        websocket.onmessage = (event) => {
+        websocket.onmessage = async (event) => {
             const message = JSON.parse(event.data);
             const payload = message.payload;
             
             if (payload) {
                 switch (payload.type) {
                     case 'offer':
-                        handleRemoteOffer(payload);
+                        // Handle offer immediately
+                        await handleRemoteOffer(payload);
                         break;
                     case 'answer':
-                        handleRemoteAnswer(payload);
+                        await handleRemoteAnswer(payload);
                         break;
                     case 'candidate':
-                        handleRemoteCandidate(payload);
+                        await handleRemoteCandidate(payload);
                         break;
                     case 'hangup':
                         if (payload.senderId.toString() === receiverId) {
@@ -225,13 +237,11 @@ async function handleRemoteOffer(payload) {
             }));
             console.log('Remote description set successfully');
             
-            // Process any pending candidates after setting remote description
             processPendingIceCandidates();
             
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
             
-            // Send answer through WebSocket
             const message = {
                 payload: {
                     type: 'answer',
@@ -242,6 +252,10 @@ async function handleRemoteOffer(payload) {
             };
             websocket.send(JSON.stringify(message));
             console.log('Answer sent through WebSocket');
+            
+            if (!callTimer) {
+                startCallTimer();
+            }
         } catch (e) {
             console.error('Error handling remote offer:', e);
         }
@@ -314,6 +328,7 @@ async function initiateCall() {
  * Cleans up local call resources (streams, connections) without notifying the server.
  */
 function hangupCallLocally() {
+    stopCallTimer(); // Stop the timer when call ends
     if (websocket) {
         websocket.close();
     }
@@ -379,6 +394,35 @@ function toggleMute() {
     });
 }
 
+function startCallTimer() {
+    console.log('Starting call timer...');
+    if (callTimer) {
+        clearInterval(callTimer);
+    }
+    
+    callStartTime = new Date();
+    callTimerDisplay.textContent = '00:00';
+    
+    callTimer = setInterval(() => {
+        const now = new Date();
+        const diff = now - callStartTime;
+        const minutes = Math.floor(diff / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+        const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        callTimerDisplay.textContent = timeString;
+        console.log('Timer updated:', timeString);
+    }, 1000);
+}
+
+function stopCallTimer() {
+    console.log('Stopping call timer...');
+    if (callTimer) {
+        clearInterval(callTimer);
+        callTimer = null;
+    }
+    callTimerDisplay.textContent = '00:00';
+}
+
 // --- Initialization ---
 async function initialize() {
     if (protectPage()) {
@@ -390,17 +434,22 @@ async function initialize() {
         try {
             await setupMedia();
             createPeerConnection();
-            await connectWebSocket(); // Wait for WebSocket connection
+            await connectWebSocket();
             
             const urlParams = new URLSearchParams(window.location.search);
             const isCaller = urlParams.get('isCaller') === 'true';
+            const incomingOffer = sessionStorage.getItem('incomingSdpOffer');
 
             if (isCaller) {
                 await initiateCall();
-            } else {
-                handleIncomingOffer();
+            } else if (incomingOffer) {
+                // If we have an incoming offer, handle it immediately
+                const offerData = JSON.parse(incomingOffer);
+                await handleRemoteOffer(offerData);
+                sessionStorage.removeItem('incomingSdpOffer');
             }
 
+            // Add event listeners
             muteBtn.addEventListener('click', toggleMute);
             endCallBtn.addEventListener('click', handleEndVoice);
             
@@ -410,6 +459,7 @@ async function initialize() {
                 endCallModal.style.display = 'none';
             });
 
+            // Make functions globally available
             window.handleLogout = handleLogout;
         } catch (error) {
             console.error('Error during initialization:', error);
