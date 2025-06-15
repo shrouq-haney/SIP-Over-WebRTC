@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<<<<<<< HEAD
 <Context docBase="D:/ItI LAB/backend/src/main/webapp" path="/WebRTC_BackEnd">
   <Resources cacheMaxSize="10240">
     <PreResources base="D:/ItI LAB/backend/target/classes" className="org.apache.catalina.webresources.DirResourceSet" webAppMount="/WEB-INF/classes"/>
+=======
+<Context docBase="D:/ITI_Prjs/FinalPrj/WebRTC_BackEnd/src/main/webapp">
+  <Resources cacheMaxSize="10240">
+    <PreResources base="D:/ITI_Prjs/FinalPrj/WebRTC_BackEnd/target/classes" className="org.apache.catalina.webresources.DirResourceSet" webAppMount="/WEB-INF/classes"/>
+>>>>>>> 8943416ec51f7160619766ac1a73c7ccea4fa35a
     <PostResources base="C:/Users/hosny/.m2/repository/mysql/mysql-connector-java/8.0.25/mysql-connector-java-8.0.25.jar" className="org.apache.catalina.webresources.FileResourceSet" webAppMount="/WEB-INF/lib/mysql-connector-java-8.0.25.jar"/>
     <PostResources base="C:/Users/hosny/.m2/repository/com/google/protobuf/protobuf-java/3.11.4/protobuf-java-3.11.4.jar" className="org.apache.catalina.webresources.FileResourceSet" webAppMount="/WEB-INF/lib/protobuf-java-3.11.4.jar"/>
     <PostResources base="C:/Users/hosny/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.12.3/jackson-databind-2.12.3.jar" className="org.apache.catalina.webresources.FileResourceSet" webAppMount="/WEB-INF/lib/jackson-databind-2.12.3.jar"/>
@@ -11,6 +17,9 @@
     <PostResources base="C:/Users/hosny/.m2/repository/io/jsonwebtoken/jjwt-api/0.11.2/jjwt-api-0.11.2.jar" className="org.apache.catalina.webresources.FileResourceSet" webAppMount="/WEB-INF/lib/jjwt-api-0.11.2.jar"/>
     <PostResources base="C:/Users/hosny/.m2/repository/io/jsonwebtoken/jjwt-impl/0.11.2/jjwt-impl-0.11.2.jar" className="org.apache.catalina.webresources.FileResourceSet" webAppMount="/WEB-INF/lib/jjwt-impl-0.11.2.jar"/>
     <PostResources base="C:/Users/hosny/.m2/repository/io/jsonwebtoken/jjwt-jackson/0.11.2/jjwt-jackson-0.11.2.jar" className="org.apache.catalina.webresources.FileResourceSet" webAppMount="/WEB-INF/lib/jjwt-jackson-0.11.2.jar"/>
+<<<<<<< HEAD
     <PostResources base="C:/Users/hosny/.m2/repository/org/json/json/20231013/json-20231013.jar" className="org.apache.catalina.webresources.FileResourceSet" webAppMount="/WEB-INF/lib/json-20231013.jar"/>
+=======
+>>>>>>> 8943416ec51f7160619766ac1a73c7ccea4fa35a
   </Resources>
 </Context>
