@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Login - SASH Talk</title>
+    <link rel="icon" type="image/png" href="../images/outgoing-call.png">
+
+    <link rel="stylesheet" href="../CSS/main.css" />
+    <link rel="stylesheet" href="../CSS/auth.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="auth-body">
+    <div class="auth-logo">
+        <img src="../images/logo.png" alt="Logo">
+    </div>
+    
+    <div class="auth-container">
+        <div class="auth-image">
+            <h1>Welcome to SASH Talk</h1>
+            <p>Connect with your team through high-quality video calls, voice chats, and instant messaging.</p>
+        
+            <div class="floating">
+                <i class="fas fa-comments" style="font-size: 100px; color: rgba(255,255,255,0.1);"></i>
+            </div>
+        </div>
+
+        <div class="auth-form-container">
+            <h2>Sign In</h2>
+            <form class="auth-form" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="phone">Phone Number</label>
+                    <input type="tel" id="phone" name="phone" 
+                           pattern="[0-9]{11}" 
+                           maxlength="11" 
+                           placeholder="Enter your phone number (11 digits)" 
+                           required>
+                    <small class="error-message" id="phone-error"></small>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" 
+                           placeholder="Enter your password" 
+                           required>
+                </div>
+                <!-- This is where server error messages will be displayed -->
+                <div id="server-error" class="error-message" style="display: none;"></div>
+                <button type="submit" class="auth-button">
+                    <i class="fas fa-sign-in-alt"></i> Sign In
+                </button>
+            </form>
+            <p class="auth-switch">
+                Don't have an account? <a href="register.html">Create Account</a>
+            </p>
+        </div>
+    </div>
+
+    <script type="module" src="../js/api.js"></script>
+    <script type="module" src="../js/auth.js"></script>
+</body>
+</html> 
