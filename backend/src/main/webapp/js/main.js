@@ -337,11 +337,17 @@ async function checkForNewMessages() {
                         }
                     }
 
-                    // Show notification immediately
-                    showNewMessagePopup(newMessage.senderId, senderName);
+                    // Only show notification if it's not a Close message or if it's the first one
+                    if (newMessage.content !== 'Close' || !sessionStorage.getItem('closeMessageShown')) {
+                        showNewMessagePopup(newMessage.senderId, senderName);
+                        // If it's a Close message, mark it as shown
+                        if (newMessage.content === 'Close') {
+                            sessionStorage.setItem('closeMessageShown', 'true');
+                        }
+                    }
                     
                     // Update unread count
-                    updateUnreadCount(newMessage.senderId, newMessage.unreadCount || 0);
+                    await updateUnreadCounts();
                 }
 
                 // Save updated notified senders
